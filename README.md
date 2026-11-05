@@ -5,37 +5,6 @@
 [![Tests: offline suite](https://img.shields.io/badge/tests-566%20offline-2e8b57)](CONTRIBUTING.md#verification)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen)](CONTRIBUTING.md)
 
-**A local-first observatory for household DNS traffic.** It captures what a home network actually asks for, runs bounded observation campaigns, and turns the result into reports that stay honest about what a DNS lookup can and cannot prove.
-
-> **This is the public repository.** It contains the code, the design documents and the engineering record — with household-specific values removed. The live deployment (raw DNS evidence, session handovers, campaign state, credentials) stays in a private repository and is never published here. See [Public release](#public-release) for exactly what was removed or replaced.
-
-The project began as a read-only investigation of a stock Starlink Gen 3 router. It is now a working system: a monitoring-only Pi-hole resolver, a capture bridge that moves settled windows into private storage, and a reporting application that produces frozen, evidence-backed reports on **possible gaming-related signals**.
-
-> **It is not a gameplay detector, a parental-control tool or a clinical instrument.** A DNS lookup is a request. It is not proof that a game was played, that a connection succeeded, who made the request, or for how long.
-
-## About
-
-**Household DNS Insights** is a local-first system for observing what a home network asks its DNS resolver for, and for reporting those observations without overstating them.
-
-- **Who it is for:** anyone running a home network who wants a readable, evidence-backed view of the names their devices look up — without blocking, without device profiling, and without handing traffic to a third party.
-- **What it is not:** blocking, parental enforcement, gameplay detection, diagnosis, or any verdict about a person. A lookup is a request, not proof of what happened afterwards.
-- **What it is made of:** a monitoring-only Pi-hole resolver, a capture bridge that moves settled windows into private storage, and a report application that produces frozen reports with explicit coverage, gaps and uncertainty.
-- **Where it runs:** entirely on your own hardware. Ordinary reporting makes zero external calls; optional research runs are separately confirmed, budget-capped and recorded.
-
-**This repository is the public, sanitized half of the project.** The live household deployment, its raw evidence and its session records live in a private repository — see [Public release](#public-release) for exactly what that split means.
-
-The offline implementation is accepted and verified (566 offline tests; lock, format and lint clean). Live gates, campaign evidence and anything still pending are recorded in the [006 task ledger](specs/006-reliable-household-operation/tasks.md), and every operational step has its own runbook under [`docs/operations/`](docs/operations/household-bringup-runbook.md).
-
-**Licensing:** no license file yet — ask the maintainer about reuse terms; do not assume an open-source license applies.
-
-## What you get
-
-- **Bounded campaigns.** Start a 72-hour observation; every hour becomes a settled capture window with its own state, and every gap stays visible instead of being smoothed away.
-- **Frozen reports.** A campaign-wide report, a single local day, or the last 24/48 hours within campaign bounds — with observed names, lookup times, supporting evidence and the uncertainty attached to each claim. CSV and JSON follow the same frozen projection.
-- **Coverage you can audit.** Each report shows what was collected, what failed, and what is simply unknown. A healthy web service is never mistaken for a working collector.
-- **Two separate surfaces.** A shared household dashboard for reading reports, and a protected owner dashboard (TLS, login, CSRF) that is the only place optional research can be dispatched.
-- **Optional, budget-capped research.** Selected public names can be classified by a provider you explicitly confirm, with per-run limits. Ordinary reporting makes zero external calls, and nothing is ever inferred from bandwidth patterns.
-
 ## How it fits together
 
 ```mermaid
@@ -91,6 +60,37 @@ flowchart TB
 Raw evidence, credentials, exports and backups live outside Git, in private `0700/0600` paths. See [current architecture](docs/reference/current-architecture.md) for the full component and data-flow description.
 
 Addresses in the deployment examples are **documentation placeholders**. A real deployment will use your own router, relay host and VM addresses — see the [network policy contract](dns-pilot/network_policy.py) and the [bring-up runbook](docs/operations/household-bringup-runbook.md) for the values you are expected to change.
+
+**A local-first observatory for household DNS traffic.** It captures what a home network actually asks for, runs bounded observation campaigns, and turns the result into reports that stay honest about what a DNS lookup can and cannot prove.
+
+> **This is the public repository.** It contains the code, the design documents and the engineering record — with household-specific values removed. The live deployment (raw DNS evidence, session handovers, campaign state, credentials) stays in a private repository and is never published here. See [Public release](#public-release) for exactly what was removed or replaced.
+
+The project began as a read-only investigation of a stock Starlink Gen 3 router. It is now a working system: a monitoring-only Pi-hole resolver, a capture bridge that moves settled windows into private storage, and a reporting application that produces frozen, evidence-backed reports on **possible gaming-related signals**.
+
+> **It is not a gameplay detector, a parental-control tool or a clinical instrument.** A DNS lookup is a request. It is not proof that a game was played, that a connection succeeded, who made the request, or for how long.
+
+## About
+
+**Household DNS Insights** is a local-first system for observing what a home network asks its DNS resolver for, and for reporting those observations without overstating them.
+
+- **Who it is for:** anyone running a home network who wants a readable, evidence-backed view of the names their devices look up — without blocking, without device profiling, and without handing traffic to a third party.
+- **What it is not:** blocking, parental enforcement, gameplay detection, diagnosis, or any verdict about a person. A lookup is a request, not proof of what happened afterwards.
+- **What it is made of:** a monitoring-only Pi-hole resolver, a capture bridge that moves settled windows into private storage, and a report application that produces frozen reports with explicit coverage, gaps and uncertainty.
+- **Where it runs:** entirely on your own hardware. Ordinary reporting makes zero external calls; optional research runs are separately confirmed, budget-capped and recorded.
+
+**This repository is the public, sanitized half of the project.** The live household deployment, its raw evidence and its session records live in a private repository — see [Public release](#public-release) for exactly what that split means.
+
+The offline implementation is accepted and verified (566 offline tests; lock, format and lint clean). Live gates, campaign evidence and anything still pending are recorded in the [006 task ledger](specs/006-reliable-household-operation/tasks.md), and every operational step has its own runbook under [`docs/operations/`](docs/operations/household-bringup-runbook.md).
+
+**Licensing:** no license file yet — ask the maintainer about reuse terms; do not assume an open-source license applies.
+
+## What you get
+
+- **Bounded campaigns.** Start a 72-hour observation; every hour becomes a settled capture window with its own state, and every gap stays visible instead of being smoothed away.
+- **Frozen reports.** A campaign-wide report, a single local day, or the last 24/48 hours within campaign bounds — with observed names, lookup times, supporting evidence and the uncertainty attached to each claim. CSV and JSON follow the same frozen projection.
+- **Coverage you can audit.** Each report shows what was collected, what failed, and what is simply unknown. A healthy web service is never mistaken for a working collector.
+- **Two separate surfaces.** A shared household dashboard for reading reports, and a protected owner dashboard (TLS, login, CSRF) that is the only place optional research can be dispatched.
+- **Optional, budget-capped research.** Selected public names can be classified by a provider you explicitly confirm, with per-run limits. Ordinary reporting makes zero external calls, and nothing is ever inferred from bandwidth patterns.
 
 ## Public release
 
