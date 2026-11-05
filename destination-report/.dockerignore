@@ -1,0 +1,32 @@
+# Keep the build context to the source, the lock and the shipped tools.
+# Private evidence, credentials, certificates, local databases and dev tooling are
+# never sent to the builder.
+
+.venv
+**/.venv
+**/__pycache__
+**/*.pyc
+.ruff_cache
+.pytest_cache
+.mypy_cache
+tests
+.git
+.gitignore
+compose.yaml
+Dockerfile
+.dockerignore
+
+# Local/private material (defence in depth; also ignored by git).
+.env
+.env.*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.pem
+*.key
+*.crt
+*password*
+*session-key*
+*secret*
+*token*
+PRIVATE_*

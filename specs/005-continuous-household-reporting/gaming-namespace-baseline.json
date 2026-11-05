@@ -1,0 +1,276 @@
+{
+  "schema_version": 1,
+  "revision": "gaming-signals-reviewed-2026-11-02-r3",
+  "rules": [
+    {
+      "rule_id": "valorant_official_site",
+      "namespace": "playvalorant.com",
+      "match": "exact",
+      "group_id": "valorant_web",
+      "group_label": "VALORANT official website (not gameplay)",
+      "group_kind": "platform",
+      "review_note": "Official VALORANT site: https://playvalorant.com/ ; a DNS query can mean browsing or a page load, not game use or server location."
+    },
+    {
+      "rule_id": "valorant_public_catalog",
+      "namespace": "valorant.dyn.riotcdn.net",
+      "match": "exact",
+      "group_id": "valorant_content",
+      "group_label": "VALORANT content catalog (not gameplay)",
+      "group_kind": "platform",
+      "review_note": "Riot documents this host for a public assets catalog: https://developer.riotgames.com/docs/valorant ; not a match-server or proven game-client endpoint."
+    },
+    {
+      "rule_id": "valorant_secure_catalog",
+      "namespace": "valorant.secure.dyn.riotcdn.net",
+      "match": "exact",
+      "group_id": "valorant_content",
+      "group_label": "VALORANT content catalog (not gameplay)",
+      "group_kind": "platform",
+      "review_note": "Riot content/patch host listed by https://help.vanta.gg/article/107-what-do-i-need-to-authorize-on-my-schools-network-for-valorant ; asset traffic, not a match session."
+    },
+    {
+      "rule_id": "valorant_session_ap",
+      "namespace": "glz-ap-1.ap.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_session",
+      "group_label": "VALORANT match/session API (lobby to live match)",
+      "group_kind": "game",
+      "review_note": "Documented base https://glz-{region}-1.{shard}.a.pvp.net (https://github.com/techchrism/valorant-api-docs/blob/trunk/docs/common-components.md); a query can be sign-in or lobby, not proof of a live match."
+    },
+    {
+      "rule_id": "valorant_session_eu",
+      "namespace": "glz-eu-1.eu.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_session",
+      "group_label": "VALORANT match/session API (lobby to live match)",
+      "group_kind": "game",
+      "review_note": "Documented base https://glz-{region}-1.{shard}.a.pvp.net (https://github.com/techchrism/valorant-api-docs/blob/trunk/docs/common-components.md); a query can be sign-in or lobby, not proof of a live match."
+    },
+    {
+      "rule_id": "valorant_session_na",
+      "namespace": "glz-na-1.na.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_session",
+      "group_label": "VALORANT match/session API (lobby to live match)",
+      "group_kind": "game",
+      "review_note": "Concrete NA example in https://help.vanta.gg/article/107-what-do-i-need-to-authorize-on-my-schools-network-for-valorant and the documented glz base; a query can be sign-in or lobby."
+    },
+    {
+      "rule_id": "valorant_session_br",
+      "namespace": "glz-br-1.na.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_session",
+      "group_label": "VALORANT match/session API (lobby to live match)",
+      "group_kind": "game",
+      "review_note": "Region/shard table maps br to the na shard (https://valapidocs.techchrism.me/endpoint/current-game-player); a query can be sign-in or lobby."
+    },
+    {
+      "rule_id": "valorant_session_latam",
+      "namespace": "glz-latam-1.na.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_session",
+      "group_label": "VALORANT match/session API (lobby to live match)",
+      "group_kind": "game",
+      "review_note": "Region/shard table maps latam to the na shard (https://valapidocs.techchrism.me/endpoint/current-game-player); a query can be sign-in or lobby."
+    },
+    {
+      "rule_id": "valorant_session_kr",
+      "namespace": "glz-kr-1.kr.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_session",
+      "group_label": "VALORANT match/session API (lobby to live match)",
+      "group_kind": "game",
+      "review_note": "Region/shard table maps kr to the kr shard (https://valapidocs.techchrism.me/endpoint/current-game-player); a query can be sign-in or lobby."
+    },
+    {
+      "rule_id": "valorant_session_pbe",
+      "namespace": "glz-na-1.pbe.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_session",
+      "group_label": "VALORANT match/session API (lobby to live match)",
+      "group_kind": "game",
+      "review_note": "PBE playtest shard from the region/shard table (https://valapidocs.techchrism.me/endpoint/current-game-player); a query can be sign-in or lobby."
+    },
+    {
+      "rule_id": "valorant_player_data_ap",
+      "namespace": "pd.ap.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_player_data",
+      "group_label": "VALORANT player-data API (while the client is signed in)",
+      "group_kind": "game",
+      "review_note": "Documented base https://pd.{shard}.a.pvp.net (https://github.com/techchrism/valorant-api-docs/blob/trunk/docs/common-components.md) with the concrete NA example in the Vanta list; store/history/account traffic, not proof of a match."
+    },
+    {
+      "rule_id": "valorant_player_data_eu",
+      "namespace": "pd.eu.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_player_data",
+      "group_label": "VALORANT player-data API (while the client is signed in)",
+      "group_kind": "game",
+      "review_note": "Documented base https://pd.{shard}.a.pvp.net (https://github.com/techchrism/valorant-api-docs/blob/trunk/docs/common-components.md); store/history/account traffic, not proof of a match."
+    },
+    {
+      "rule_id": "valorant_player_data_na",
+      "namespace": "pd.na.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_player_data",
+      "group_label": "VALORANT player-data API (while the client is signed in)",
+      "group_kind": "game",
+      "review_note": "Concrete NA example in https://help.vanta.gg/article/107-what-do-i-need-to-authorize-on-my-schools-network-for-valorant ; store/history/account traffic, not proof of a match."
+    },
+    {
+      "rule_id": "valorant_player_data_kr",
+      "namespace": "pd.kr.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_player_data",
+      "group_label": "VALORANT player-data API (while the client is signed in)",
+      "group_kind": "game",
+      "review_note": "Documented base https://pd.{shard}.a.pvp.net (https://github.com/techchrism/valorant-api-docs/blob/trunk/docs/common-components.md); store/history/account traffic, not proof of a match."
+    },
+    {
+      "rule_id": "valorant_player_data_pbe",
+      "namespace": "pd.pbe.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_player_data",
+      "group_label": "VALORANT player-data API (while the client is signed in)",
+      "group_kind": "game",
+      "review_note": "Documented base https://pd.{shard}.a.pvp.net (https://github.com/techchrism/valorant-api-docs/blob/trunk/docs/common-components.md); store/history/account traffic, not proof of a match."
+    },
+    {
+      "rule_id": "valorant_shared_service_ap",
+      "namespace": "shared.ap.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_shared_service",
+      "group_label": "VALORANT party/content service (while the client is signed in)",
+      "group_kind": "game",
+      "review_note": "Documented base https://shared.{shard}.a.pvp.net (https://github.com/techchrism/valorant-api-docs/blob/trunk/docs/common-components.md); party/content traffic, not proof of a live match."
+    },
+    {
+      "rule_id": "valorant_shared_service_eu",
+      "namespace": "shared.eu.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_shared_service",
+      "group_label": "VALORANT party/content service (while the client is signed in)",
+      "group_kind": "game",
+      "review_note": "Documented base https://shared.{shard}.a.pvp.net (https://github.com/techchrism/valorant-api-docs/blob/trunk/docs/common-components.md) and observed for a real client in https://forum.opnsense.org/index.php?topic=32236.0 ; party/content traffic, not proof of a live match."
+    },
+    {
+      "rule_id": "valorant_shared_service_na",
+      "namespace": "shared.na.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_shared_service",
+      "group_label": "VALORANT party/content service (while the client is signed in)",
+      "group_kind": "game",
+      "review_note": "Concrete NA example in https://help.vanta.gg/article/107-what-do-i-need-to-authorize-on-my-schools-network-for-valorant ; party/content traffic, not proof of a live match."
+    },
+    {
+      "rule_id": "valorant_shared_service_kr",
+      "namespace": "shared.kr.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_shared_service",
+      "group_label": "VALORANT party/content service (while the client is signed in)",
+      "group_kind": "game",
+      "review_note": "Documented base https://shared.{shard}.a.pvp.net (https://github.com/techchrism/valorant-api-docs/blob/trunk/docs/common-components.md); party/content traffic, not proof of a live match."
+    },
+    {
+      "rule_id": "valorant_shared_service_pbe",
+      "namespace": "shared.pbe.a.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_shared_service",
+      "group_label": "VALORANT party/content service (while the client is signed in)",
+      "group_kind": "game",
+      "review_note": "Documented base https://shared.{shard}.a.pvp.net (https://github.com/techchrism/valorant-api-docs/blob/trunk/docs/common-components.md); party/content traffic, not proof of a live match."
+    },
+    {
+      "rule_id": "valorant_anticheat",
+      "namespace": "telemetry.vg.ac.pvp.net",
+      "match": "exact",
+      "group_id": "valorant_anticheat",
+      "group_label": "VALORANT Vanguard anti-cheat telemetry (game-running signal)",
+      "group_kind": "game",
+      "review_note": "Concrete hostname in https://help.vanta.gg/article/107-what-do-i-need-to-authorize-on-my-schools-network-for-valorant ; may appear whenever the game client runs, including between matches, so it is not proof of a session."
+    },
+    {
+      "rule_id": "valorant_voice_vivox",
+      "namespace": "valxp.vivox.com",
+      "match": "exact",
+      "group_id": "valorant_voice",
+      "group_label": "VALORANT in-game voice (only while voice connects)",
+      "group_kind": "game",
+      "review_note": "Concrete hostname in https://help.vanta.gg/article/107-what-do-i-need-to-authorize-on-my-schools-network-for-valorant ; appears only when a party/match voice channel connects, so its absence means nothing."
+    },
+    {
+      "rule_id": "valorant_voice_valamxp",
+      "namespace": "valamxp.vivox.com",
+      "match": "exact",
+      "group_id": "valorant_voice",
+      "group_label": "VALORANT in-game voice (only while voice connects)",
+      "group_kind": "game",
+      "review_note": "Observed address in client/proxy logs at https://forum.opnsense.org/index.php?topic=32236.0 (second-hand observation) ; appears only when voice connects."
+    },
+    {
+      "rule_id": "valorant_voice_valamxp_www",
+      "namespace": "valamxp.www.vivox.com",
+      "match": "exact",
+      "group_id": "valorant_voice",
+      "group_label": "VALORANT in-game voice (only while voice connects)",
+      "group_kind": "game",
+      "review_note": "Observed address in client/proxy logs at https://forum.opnsense.org/index.php?topic=32236.0 (second-hand observation) ; appears only when voice connects."
+    },
+    {
+      "rule_id": "steam_store",
+      "namespace": "store.steampowered.com",
+      "match": "exact",
+      "group_id": "steam_store",
+      "group_label": "Steam storefront (not gameplay)",
+      "group_kind": "platform",
+      "review_note": "Valve store: https://store.steampowered.com/ ; DNS alone cannot distinguish browsing from client activity or a purchase."
+    },
+    {
+      "rule_id": "steam_community_images",
+      "namespace": "steamcdn-a.akamaihd.net",
+      "match": "exact",
+      "group_id": "steam_images",
+      "group_label": "Steam-hosted images (not gameplay)",
+      "group_kind": "platform",
+      "review_note": "Valve Steamworks avatar URL example: https://partner.steamgames.com/doc/webapi/isteamuser?l=english ; shared image host, not a game-download or match-server signal."
+    },
+    {
+      "rule_id": "epic_store",
+      "namespace": "store.epicgames.com",
+      "match": "exact",
+      "group_id": "epic_store",
+      "group_label": "Epic Games Store (not gameplay)",
+      "group_kind": "platform",
+      "review_note": "Epic official storefront: https://store.epicgames.com/ ; DNS alone cannot distinguish browsing from launcher or game use."
+    },
+    {
+      "rule_id": "xbox_games_site",
+      "namespace": "www.xbox.com",
+      "match": "exact",
+      "group_id": "xbox_web",
+      "group_label": "Xbox website (not gameplay)",
+      "group_kind": "platform",
+      "review_note": "Microsoft game catalog: https://www.xbox.com/en-US/games ; hostname serves other Xbox pages too; not a game session or console signal."
+    },
+    {
+      "rule_id": "playstation_store",
+      "namespace": "store.playstation.com",
+      "match": "exact",
+      "group_id": "playstation_store",
+      "group_label": "PlayStation Store (not gameplay)",
+      "group_kind": "platform",
+      "review_note": "Sony official storefront: https://store.playstation.com/en-us/ ; DNS is only a store host lookup, not play or a purchase."
+    },
+    {
+      "rule_id": "playstation_images",
+      "namespace": "image.api.playstation.com",
+      "match": "exact",
+      "group_id": "playstation_images",
+      "group_label": "PlayStation image delivery (not gameplay)",
+      "group_kind": "platform",
+      "review_note": "Linked image host on https://store.playstation.com/en-us/ ; shared PlayStation imagery, not proof of a store visit, download or match."
+    }
+  ]
+}

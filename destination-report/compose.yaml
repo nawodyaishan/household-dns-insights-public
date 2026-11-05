@@ -1,0 +1,73 @@
+# One isolated application service. The host port is loopback-only; the container
+# itself receives no Docker socket, no resolver volume, no administration credential
+# and no host network. Input evidence and owner configuration are read-only mounts;
+# only the state directory is writable.
+#
+# Required environment (the Makefile supplies 0700/0600 defaults):
+#   HR_CONFIG_DIR  owner password, session key and TLS material (read-only)
+#   HR_INPUT_DIR   snapshots and presence envelopes exported on the host (read-only)
+#   HR_STATE_DIR   the application SQLite database (writable, private)
+#
+# Usage: docker compose -f destination-report/compose.yaml up -d
+
+name: household-report
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: household-report:local
+    user: "${HR_UID:-1000}:${HR_GID:-1000}"
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 20s
+    ports:
+      - "127.0.0.1:${HR_PORT:-8787}:8787"
+    environment:
+      HOME: /tmp
+      HR_BIND_HOST: 0.0.0.0
+      HR_ALLOW_CONTAINER_BIND: "1"
+      HR_DATABASE: /state/app.sqlite3
+      HR_INPUT_DIR: /input
+      HR_BRIDGE_STATUS_FILE: /state/bridge-status.json
+      HR_TIMEZONE: ${HR_TIMEZONE:-UTC}
+      HR_PASSWORD_FILE: ${HR_PASSWORD_FILE:-/config/password}
+      HR_SESSION_KEY_FILE: ${HR_SESSION_KEY_FILE:-/config/session-key}
+      HR_TLS_CERT_FILE: ${HR_TLS_CERT_FILE:-/config/tls/cert.pem}
+      HR_TLS_KEY_FILE: ${HR_TLS_KEY_FILE:-/config/tls/key.pem}
+      HR_ALLOWED_HOSTS: ${HR_ALLOWED_HOSTS:-127.0.0.1:8787,localhost:8787}
+      HR_PUBLIC_URL: ${HR_PUBLIC_URL:-https://127.0.0.1:8787}
+    volumes:
+      - type: bind
+        source: "${HR_CONFIG_DIR:?Set HR_CONFIG_DIR to the owner configuration directory}"
+        target: /config
+        read_only: true
+      - type: bind
+        source: "${HR_INPUT_DIR:?Set HR_INPUT_DIR to the private input directory}"
+        target: /input
+        read_only: true
+      - type: bind
+        source: "${HR_STATE_DIR:?Set HR_STATE_DIR to the private state directory}"
+        target: /state
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "2"
+    healthcheck:
+      test: ["CMD", "python", "/app/tools/healthcheck.py"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

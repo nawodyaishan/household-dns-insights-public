@@ -1,0 +1,42 @@
+# Local unredacted network evidence
+PRIVATE*
+**/PRIVATE*/
+
+# Python caches
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Credentials and local environment
+.env
+.env.*
+!.env.example
+secrets/
+**/secrets/
+*password*
+# The owner-password hashing tool is code, not a credential file.
+!destination-report/tools/set_password.py
+*.key
+*.pem
+
+# Resolver state, query databases and private backups
+dns-pilot/etc-pihole/
+dns-pilot/data/
+dns-pilot/logs/
+dns-pilot/backups/
+*.db
+*.db-*
+*.sqlite*
+*.log
+
+# Local code-intelligence index (rebuild with: codegraph init)
+.codegraph/
+
+# Local editor and OS files
+.DS_Store
+*.swp
+*.swo
+*~

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Inventory · Household DNS report{% endblock %}
+{% block content %}
+{% if error %}<p class="error card" role="alert">{{ error }}</p>{% endif %}
+{% if saved %}<p class="notice card" role="status">Manual revision saved for {{ saved }}. Earlier revisions remain in the audit trail.</p>{% endif %}
+
+<section class="card">
+  <h1>Observed device inventory</h1>
+  <p class="muted">
+    Generated {{ data.generated_utc|local_time }} from {{ data.polls.total }} stored poll(s):
+    {{ data.polls.successful }} succeeded, {{ data.polls.failed }} failed.
+    {% if data.polls.median_interval_s %}Typical spacing {{ data.polls.median_interval_s|round|int }} s.{% endif %}
+  </p>
+  {% if data.polls.total == 0 %}
+    <p class="muted">No presence poll has been imported yet. Import existing private poll files before relying on this view.</p>
+  {% endif %}
+  <ul class="plain notes">
+    {% for note in data.notes %}<li>{{ note }}</li>{% endfor %}
+  </ul>
+</section>
+
+{% if data.gaps %}
+<section class="card">
+  <h2>Monitoring gaps</h2>
+  <p class="muted">Poll failures are gaps, never device absences.</p>
+  <ul class="plain">
+    {% for gap in data.gaps %}
+      <li>{{ gap.start_utc|local_time }} – {% if gap.end_utc %}{{ gap.end_utc|local_time }}{% else %}end of monitoring{% endif %} · {{ gap.reason }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% macro device_card(device) %}
+  <article class="entry" id="{{ device.device_key }}">
+    <h3>{{ device.display_name }}</h3>
+    <p class="meta">
+      {% if device.display_name != device.observed_label and device.observed_label %}
+        Observed name: {{ device.observed_label }} ·
+      {% endif %}
+      Category: {{ device.category }}{% if device.category_source == "manual" %} (manual){% endif %} ·
+      Role: {{ device.role }} · Interface: {{ device.iface_label or "not reported" }}
+    </p>
+    <p class="meta">
+      Current state: <span class="state state-{{ device.state }}">{{ device.state.replace("_", " ") }}</span>
+      · First listed {{ device.first_listed_utc|local_time }} · Last listed {{ device.last_listed_utc|local_time }}
+    </p>
+    <p class="meta">
+      Listed in {{ device.listed_polls }} successful poll(s) · not listed in {{ device.counts.not_listed }} ·
+      monitoring gaps {{ device.counts.monitoring_gap }}
+    </p>
+    <p class="meta">MAC {{ device.mac_address or "not reported" }} · IP {{ device.ip_addresses|join(", ") or "not reported" }}</p>
+    {% if device.warnings %}
+      <p class="tags">{% for warning in device.warnings %}<span class="tag warn">{{ warning }}</span>{% endfor %}</p>
+    {% endif %}
+    <details>
+      <summary>Poll-granular presence segments</summary>
+      <ul class="plain">
+        {% for segment in device.segments %}
+          <li>
+            {{ segment.start_utc|local_time }} →
+            {% if segment.end_utc %}{{ segment.end_utc|local_time }}{% else %}end of monitoring{% endif %}
+            · {{ segment.state.replace("_", " ") }} ({{ segment.polls }} poll(s))
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="meta">{{ device.vision_note }}</p>
+    </details>
+    <details>
+      <summary>Manual name or category override</summary>
+      <form method="post" action="/inventory/{{ device.device_key }}" data-single-submit>
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label for="name-{{ device.device_key|replace(':', '-')|replace('.', '-') }}">Display name</label>
+        <input id="name-{{ device.device_key|replace(':', '-')|replace('.', '-') }}" name="display_name" value="{{ device.display_name }}" maxlength="64">
+        <label for="cat-{{ device.device_key|replace(':', '-')|replace('.', '-') }}">Category</label>
+        <select id="cat-{{ device.device_key|replace(':', '-')|replace('.', '-') }}" name="category">
+          {% for category in data.categories %}
+            <option value="{{ category }}" {% if category == device.category %}selected{% endif %}>{{ category }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Save manual revision</button>
+      </form>
+      <p class="meta">Manual edits affect display only. They never rewrite raw names, IP history or create DNS attribution.</p>
+    </details>
+  </article>
+{% endmacro %}
+
+<section class="card">
+  <h2>Household clients ({{ data.devices|length }})</h2>
+  {% for device in data.devices %}
+    {{ device_card(device) }}
+  {% else %}
+    <p class="muted">No household client was listed by any successful poll.</p>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h2>Infrastructure roles ({{ data.infrastructure|length }})</h2>
+  <p class="muted">Controller/repeater entries are kept for evidence but are not household endpoints.</p>
+  {% for device in data.infrastructure %}
+    {{ device_card(device) }}
+  {% else %}
+    <p class="muted">No controller or repeater entry was listed.</p>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h2>DNS attribution</h2>
+  <p class="muted">
+    Rows are attributed only through an explicitly recorded, time-valid IP binding.
+    The current lease is never used to explain older rows. Router and dish management
+    addresses always remain “Household — device unknown”.
+  </p>
+  {% if data.bindings %}
+    <h3>Binding conflicts</h3>
+    <ul class="plain">
+      {% for conflict in data.bindings %}<li>{{ conflict.ip }} · {{ conflict.reason }} (bindings {{ conflict.first_binding }} / {{ conflict.second_binding }})</li>{% endfor %}
+    </ul>
+  {% else %}
+    <p class="meta">No binding conflict is recorded. With no reviewed bindings, every DNS row stays explicitly device-unknown.</p>
+  {% endif %}
+</section>
+{% endblock %}

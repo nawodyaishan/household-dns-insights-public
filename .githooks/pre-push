@@ -1,0 +1,28 @@
+#!/bin/sh
+# Offline pre-push checks, using the locked Lefthook binary from the project env.
+#
+# Lefthook's generated hook falls back to `uv run lefthook`, which can resolve a
+# different environment and download packages during a push. This shim pins the
+# executable instead: no global install, no network, no auto-sync.
+#
+# `--no-auto-install` matters: lefthook rewrites .githooks/* whenever its
+# checksum of lefthook.yml changes, which would replace this shim with the
+# generated one and reintroduce the fallback above.
+set -eu
+
+root=$(git rev-parse --show-toplevel)
+bin="$root/destination-report/.venv/bin/lefthook"
+
+if [ ! -x "$bin" ]; then
+  echo "pre-push: application environment is missing." >&2
+  echo "Run 'task dev-setup' once, then push again. Set LEFTHOOK=0 to skip." >&2
+  exit 1
+fi
+
+if ! command -v uv >/dev/null 2>&1; then
+  echo "pre-push: uv is required for the offline checks (no downloads are made)." >&2
+  echo "Install uv and run 'task dev-setup', or set LEFTHOOK=0 to skip." >&2
+  exit 1
+fi
+
+exec "$bin" run --no-auto-install pre-push "$@"

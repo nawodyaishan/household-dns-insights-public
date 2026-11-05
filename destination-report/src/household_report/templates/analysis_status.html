@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Analysis · Household DNS report{% endblock %}
+{% block content %}
+<section class="card" {% if not terminal %}data-analysis-id="{{ status.analysis_id }}"{% endif %}>
+  <h1>Analysis <span class="state state-{{ state }}">{{ state }}</span></h1>
+  <p class="muted">
+    Created {{ status.created_utc|local_time }} · updated {{ status.updated_utc|local_time }}
+    · {{ status.provider or "no provider" }} / {{ status.model_id or "no model" }}
+  </p>
+  {% if status.summary %}
+    <p class="notice">{{ status.summary }}</p>
+  {% elif not terminal %}
+    <p class="notice" role="status">Work in progress. This page refreshes when the job reaches a terminal state.</p>
+  {% endif %}
+  <p class="meta">Analysis ID {{ status.analysis_id }}</p>
+  {% if not terminal %}
+    <p class="meta">Provider work runs in one background worker; reports stay readable meanwhile.</p>
+  {% endif %}
+  <div class="actions">
+    {% if resumable %}
+      <form method="post" action="/analysis/{{ status.analysis_id|urlencode }}/resume" data-single-submit>
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit">Resume unfinished candidates</button>
+      </form>
+    {% endif %}
+    {% if terminal %}
+      <form method="post" action="/analysis/{{ status.analysis_id|urlencode }}/reanalyze" data-single-submit>
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="nonce" value="{{ nonce }}">
+        <button type="submit">Reanalyze as a new revision</button>
+      </form>
+    {% endif %}
+    <a class="button" href="/diagnostics/analysis/{{ status.analysis_id|urlencode }}.json">Download analysis JSON</a>
+    <a class="button" href="/analysis">All analyses</a>
+  </div>
+  <p class="meta">Reanalysis creates a new frozen revision with the same selection and a fresh identity; saved results are never rewritten.</p>
+</section>
+
+<section class="card">
+  <h2>Budget use</h2>
+  <div class="grid">
+    <div class="stat"><span class="stat-value">{{ status.usage.analysis_requests }}</span><span class="stat-label">Provider attempts</span></div>
+    <div class="stat"><span class="stat-value">{{ status.usage.analysis_tokens|thousands }}</span><span class="stat-label">Tokens charged</span></div>
+    <div class="stat"><span class="stat-value">{{ status.usage.analysis_exa }}</span><span class="stat-label">Exa attempts</span></div>
+    <div class="stat"><span class="stat-value">{{ status.usage.day_requests }}</span><span class="stat-label">Provider attempts today</span></div>
+    <div class="stat"><span class="stat-value">{{ status.usage.day_exa }}</span><span class="stat-label">Exa attempts today</span></div>
+  </div>
+  <p class="meta">Unconfirmed attempts stay fully charged. Limits: {{ limits.requests_per_analysis }} requests, {{ limits.tokens_per_analysis }} tokens, {{ limits.exa_per_analysis }} Exa attempts per analysis.</p>
+</section>
+
+<section class="card">
+  <h2>Candidates ({{ items|length }})</h2>
+  <table>
+    <thead><tr><th>Name</th><th>State</th><th>Result</th></tr></thead>
+    <tbody>
+      {% for item in items %}
+        <tr>
+          <td>{{ item.domain }}</td>
+          <td><span class="state state-{{ item.state }}">{{ item.state }}</span></td>
+          <td>
+            {% if item.result %}
+              {% if item.result.get('service') %}<strong>{{ item.result.service }}</strong>{% elif item.result.get('provider') %}{{ item.result.provider }}{% else %}<span class="muted">unknown</span>{% endif %}
+              {% if item.result.get('confidence') %} · confidence {{ item.result.confidence }}{% endif %}
+              {% if item.result.get('verification_state') %}<p class="meta">Classification state: {{ item.result.verification_state|replace("_", " ") }} · role {{ item.result.get('role') or "unknown" }}</p>{% endif %}
+              {% if item.result.get('unresolved_reason') %}<p class="muted">{{ item.result.unresolved_reason }}</p>{% endif %}
+              {% if item.result.get('supporting_spans') %}
+                <details>
+                  <summary>Exact supporting spans</summary>
+                  {% for span in item.result.supporting_spans %}
+                    <p class="meta">{{ span.source_url }} · SHA-256 {{ span.source_sha256 }} · characters {{ span.start }}–{{ span.end }}</p>
+                    <p>{{ span.text }}</p>
+                  {% endfor %}
+                </details>
+              {% endif %}
+              {% if item.result.get('evidence') %}
+                <details>
+                  <summary>Evidence</summary>
+                  <pre>{{ item.result.evidence|tojson(indent=2) }}</pre>
+                </details>
+              {% endif %}
+            {% else %}
+              <span class="muted">{{ item.error or "no result" }}</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

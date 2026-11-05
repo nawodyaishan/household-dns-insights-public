@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Confirm analysis · Household DNS report{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Confirm what would leave this machine</h1>
+  {% if error %}
+    <p class="error" role="alert">{{ error }}</p>
+    <p><a href="/analysis">Choose another period</a></p>
+  {% elif preview %}
+    <p class="muted">
+      {{ period.start_utc|local_time }} – {{ period.end_utc|local_time }}
+      · digest {{ preview.period_digest[:16] }}…
+    </p>
+    <dl class="facts">
+      <dt>Provider</dt><dd>{{ preview.provider or "not configured" }}</dd>
+      <dt>Model</dt><dd>{{ preview.model_id or "not selected" }}</dd>
+      <dt>Public candidates</dt><dd>{{ preview.candidates|length }}</dd>
+      <dt>Excluded locally</dt><dd>{{ preview.excluded|length }}</dd>
+      <dt>Snapshot scope</dt><dd>All eligible destinations in the selected imported window; not limited to a dashboard filter</dd>
+    </dl>
+      <p class="notice">{{ preview.note }}</p>
+      <details>
+        <summary>Bounded run limits</summary>
+        <dl class="facts">
+          {% for key, value in preview.limits.items() %}<dt>{{ key|replace("_", " ")|title }}</dt><dd>{{ value }}</dd>{% endfor %}
+        </dl>
+        <p>Limits shown here are application caps, not provider account balances.</p>
+      </details>
+    {% if not ai.enabled %}
+      <p class="notice" role="status">Analysis is disabled until a provider is configured.</p>
+    {% elif preview.candidates|length == 0 %}
+      <p class="notice" role="status">No public candidate remains after local exclusions; nothing would be sent.</p>
+    {% else %}
+      <form method="post" action="/analyses" data-single-submit>
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="preview_token" value="{{ preview.preview_token }}">
+        <input type="hidden" name="preset" value="{{ params.preset }}">
+        <input type="hidden" name="snapshot" value="{{ params.snapshot }}">
+        <input type="hidden" name="start" value="{{ params.start }}">
+        <input type="hidden" name="end" value="{{ params.end }}">
+        <input type="hidden" name="scope" value="{{ params.scope }}">
+        <button type="submit" class="primary">Confirm and start analysis</button>
+      </form>
+      <p class="meta">
+        A double click resolves to one frozen job identity. Retries stay inside the same
+        budget. Closing the page does not cancel a running job.
+      </p>
+    {% endif %}
+  {% endif %}
+</section>
+
+{% if preview and preview.candidates %}
+<section class="card">
+  <h2>Candidates that would be sent ({{ preview.candidates|length }})</h2>
+  <table>
+    <thead><tr><th>Public name</th><th>DNS rows</th><th>Cached</th></tr></thead>
+    <tbody>
+      {% for item in preview.candidates %}
+        <tr>
+          <td>{{ item.name }}</td>
+          <td>{{ item.dns_rows|thousands }}</td>
+          <td>{% if item.cached %}yes{% else %}no{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if preview and preview.excluded %}
+<section class="card">
+  <h2>Excluded locally ({{ preview.excluded|length }})</h2>
+  <p class="muted">Private, tokenized, reverse or tenant-scoped names never leave the machine.</p>
+  <ul class="plain">
+    {% for item in preview.excluded %}<li>{{ item.domain }} · {{ item.reason }}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

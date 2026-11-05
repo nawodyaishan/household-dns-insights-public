@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "network": {
+    "vm_bind": "10.10.10.20",
+    "vm_port": 8787,
+    "relay_ip": "192.168.1.10",
+    "relay_port": 8787,
+    "owner_port": 8789,
+    "timezone": "UTC",
+    "compose_project": "household-report"
+  },
+  "paths": {
+    "config_dir": "/home/operator/.config/starlink-monitoring/campaign",
+    "input_dir": "/home/operator/.local/share/household-report/input",
+    "state_dir": "/home/operator/.local/share/household-report/state",
+    "bridge_dir": "/home/operator/.local/share/household-report/generated-units",
+    "campaign_config_dir": "/home/operator/.config/starlink-monitoring/campaign"
+  },
+  "bridge": {
+    "python": "/home/operator/github/starlink-monitoring/destination-report/.venv/bin/python",
+    "compose": "/home/operator/github/starlink-monitoring/destination-report/compose.yaml",
+    "docker": "/usr/bin/docker",
+    "container": "starlink-dns-pilot",
+    "database": "/etc/pihole/pihole-FTL.db",
+    "generation": "gen-1",
+    "identity": "provenance-abc123",
+    "config_dir": "/home/operator/.config/starlink-monitoring/campaign",
+    "state_dir": "/home/operator/.local/share/household-report/state",
+    "input_dir": "/home/operator/.local/share/household-report/input"
+  },
+  "provider": null,
+  "exa": null,
+  "release": null,
+  "ai_enabled": false,
+  "campaign_profile": true,
+  "shared_control": true
+}

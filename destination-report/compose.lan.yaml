@@ -1,0 +1,31 @@
+# Opt-in shared-control HTTP LAN publication; requires separate live authorization.
+# docker compose -f compose.yaml -f compose.lan.yaml config must show ONE host binding.
+services:
+  app:
+    networks:
+      - campaign
+    ports: !override
+      - "${HR_LAN_BIND:?Set approved VM LAN bind}:${HR_PORT:-8787}:8787"
+    environment:
+      HR_CAMPAIGN_PROFILE: "1"
+      HR_LAN_SHARED_CONTROL: "1"
+      HR_LAN_BIND: "${HR_LAN_BIND:?Set approved VM LAN bind}"
+      HR_PASSWORD_FILE: ""
+      HR_SESSION_KEY_FILE: ""
+      HR_TLS_CERT_FILE: ""
+      HR_TLS_KEY_FILE: ""
+    volumes: !override
+      - type: bind
+        source: "${HR_INPUT_DIR:?Set private input directory}"
+        target: /input
+        read_only: true
+      - type: bind
+        source: "${HR_STATE_DIR:?Set private state directory}"
+        target: /state
+
+networks:
+  campaign:
+    driver: bridge
+    enable_ipv6: false
+    driver_opts:
+      com.docker.network.bridge.name: br-hr005

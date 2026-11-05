@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Household DNS report{% endblock %}</title>
+    <link rel="stylesheet" href="/static/app.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <p class="brand">Household DNS report</p>
+      <nav aria-label="Sections">
+        <a href="/household" {% if page == "household" %}aria-current="page"{% endif %}>Household report</a>
+        {% if csrf or shared_control %}
+        <a href="/" {% if page == "report" %}aria-current="page"{% endif %}>Destinations</a>
+        <a href="/gaming" {% if page == "gaming" %}aria-current="page"{% endif %}>Gaming</a>
+        <a href="/inventory" {% if page == "inventory" %}aria-current="page"{% endif %}>Inventory</a>
+        <a href="/analysis" {% if page == "analysis" %}aria-current="page"{% endif %}>Analyze</a>
+        {% endif %}
+      </nav>
+    </header>
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+    <footer>
+      <p>Local observations only. No device is attributed from timing, domains or AI.</p>
+      <p>Times shown in {{ timezone }}; evidence stays in UTC. No remote assets.</p>
+      {% if csrf %}
+      <form method="post" action="/logout" data-single-submit>
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit" class="linkish">Sign out</button>
+      </form>
+      {% endif %}
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,786 @@
+version: '3'
+
+# Task runner for this repository. It replaces the former Makefile one-for-one:
+# task names, variable names and defaults are unchanged, so any recorded command
+# still works with `make` swapped for `task`.
+#
+#   task <name> [VARIABLE=value]
+#
+# Commands are capabilities, not permission. Anything that deploys, collects,
+# publishes a dashboard, changes network state or starts a campaign belongs to a
+# documented, separately authorized live gate.
+
+vars:
+  PYTHON: '{{.PYTHON | default "python3"}}'
+  UV: '{{.UV | default "uv"}}'
+  APP: destination-report
+  # Offline, non-mutating checks: no downloads, no auto-sync, no network.
+  UV_CHECK: UV_OFFLINE=1 UV_PYTHON_DOWNLOADS=0
+  COMPOSE: docker compose -f dns-pilot/compose.yaml -f dns-pilot/compose.lan.yaml
+
+  # Packaged loopback application: private directories stay outside the repository.
+  HR_CONFIG_DIR: '{{.HR_CONFIG_DIR | default (printf "%s/.config/starlink-monitoring/destination-report" .HOME)}}'
+  HR_INPUT_DIR: '{{.HR_INPUT_DIR | default (printf "%s/.local/share/household-report/input" .HOME)}}'
+  HR_STATE_DIR: '{{.HR_STATE_DIR | default (printf "%s/.local/share/household-report/state" .HOME)}}'
+  HR_PORT: '{{.HR_PORT | default "8787"}}'
+  HR_ALLOWED_HOSTS: '{{.HR_ALLOWED_HOSTS | default (printf "127.0.0.1:%s,localhost:%s,127.0.0.1:8787" .HR_PORT .HR_PORT)}}'
+  HR_PUBLIC_URL: '{{.HR_PUBLIC_URL | default (printf "https://127.0.0.1:%s" .HR_PORT)}}'
+  HR_BRIDGE_CONFIG: '{{.HR_BRIDGE_CONFIG | default (printf "%s/campaign-bridge.json" .HR_CONFIG_DIR)}}'
+  HR_BRIDGE_USER: '{{.HR_BRIDGE_USER | default (env "USER")}}'
+  HR_BRIDGE_UNITS: '{{.HR_BRIDGE_UNITS | default (printf "%s/generated-units" .HR_STATE_DIR)}}'
+  HR_TIMEZONE: '{{.HR_TIMEZONE | default "UTC"}}'
+
+  # Campaign lifecycle: LAN publication is opt-in and separate from loopback app-up.
+  HR_LAN_BIND: '{{.HR_LAN_BIND | default "10.10.10.20"}}'
+  HR_LAN_RELAY_IP: '{{.HR_LAN_RELAY_IP | default ""}}'
+  HR_LAN_ALLOWED_HOSTS: '{{.HR_LAN_ALLOWED_HOSTS | default (printf "%s:%s" (default .HR_LAN_BIND .HR_LAN_RELAY_IP) .HR_PORT)}}'
+  HR_LAN_PUBLIC_URL: '{{.HR_LAN_PUBLIC_URL | default (printf "http://%s" .HR_LAN_ALLOWED_HOSTS)}}'
+
+  # Owner dashboard relay (8789 https, AI-on): separately owned and authorized.
+  HR_AI_BIND: '{{.HR_AI_BIND | default "10.10.10.20"}}'
+  HR_AI_PORT: '{{.HR_AI_PORT | default "8789"}}'
+  HR_AI_RELAY_IP: '{{.HR_AI_RELAY_IP | default "192.168.1.10"}}'
+  HR_AI_ALLOWED_HOSTS: '{{.HR_AI_ALLOWED_HOSTS | default (printf "%s:%s" .HR_AI_RELAY_IP .HR_AI_PORT)}}'
+  HR_AI_PUBLIC_URL: '{{.HR_AI_PUBLIC_URL | default (printf "https://%s" .HR_AI_ALLOWED_HOSTS)}}'
+
+  HR_CAMPAIGN_CONFIG_DIR: '{{.HR_CAMPAIGN_CONFIG_DIR | default (printf "%s/.config/starlink-monitoring/campaign" .HOME)}}'
+  HR_OPERATOR_CONFIG: '{{.HR_OPERATOR_CONFIG | default (printf "%s/operator.json" .HR_CONFIG_DIR)}}'
+  CAMPAIGN_DB: '{{.CAMPAIGN_DB | default (printf "%s/app.sqlite3" .HR_STATE_DIR)}}'
+  CAMPAIGN_NAMESPACE: '{{.CAMPAIGN_NAMESPACE | default (printf "%s/gaming-namespaces.json" .HR_INPUT_DIR)}}'
+
+  # Operator-supplied values. Declared so overrides work and so every task can
+  # test for them without failing on an undefined template value.
+  DAYS: '{{.DAYS | default "3"}}'
+  RETAIN_DAYS: '{{.RETAIN_DAYS | default "7"}}'
+  MODE: '{{.MODE | default "offline"}}'
+  COUNT: '{{.COUNT | default "9"}}'
+  INTERVAL: '{{.INTERVAL | default "15"}}'
+  CAMPAIGN: '{{.CAMPAIGN | default ""}}'
+  DAY: '{{.DAY | default ""}}'
+  START: '{{.START | default ""}}'
+  END: '{{.END | default ""}}'
+  STOP: '{{.STOP | default ""}}'
+  INSTALL: '{{.INSTALL | default ""}}'
+  UNINSTALL: '{{.UNINSTALL | default ""}}'
+  RESTART: '{{.RESTART | default ""}}'
+  UPGRADE: '{{.UPGRADE | default ""}}'
+  ROLLBACK: '{{.ROLLBACK | default ""}}'
+  BACKUP: '{{.BACKUP | default ""}}'
+  RESTORE: '{{.RESTORE | default ""}}'
+  ACK_EMPTY: '{{.ACK_EMPTY | default ""}}'
+  CONFIG: '{{.CONFIG | default ""}}'
+  RELEASE: '{{.RELEASE | default ""}}'
+  ARCHIVE: '{{.ARCHIVE | default ""}}'
+  DEST: '{{.DEST | default ""}}'
+  DIGEST: '{{.DIGEST | default ""}}'
+  BACKUP_CHOICE: '{{.BACKUP_CHOICE | default ""}}'
+  CONFIRM: '{{.CONFIRM | default ""}}'
+  ACK_FLAG: '{{if eq .ACK_EMPTY "YES"}} --ack-empty{{end}}'
+  ARCHIVE_FLAG: '{{if .ARCHIVE}}--archive "{{.ARCHIVE}}"{{end}}'
+  CAMPAIGN_FLAG: '{{if .CAMPAIGN}}--campaign "{{.CAMPAIGN}}"{{end}}'
+
+tasks:
+  ##@ Getting started
+
+  help:
+    desc: Show available commands and variables
+    silent: true
+    cmds:
+      - |-
+        printf 'Usage: task <name> [VARIABLE=value]\n\n'
+      - task --list
+      - |
+        printf '\nCheck sweep:    PYTHON=%s UV=%s; START/END/COUNT/INTERVAL override window and sampling\n' '{{.PYTHON}}' '{{.UV}}'
+        printf 'App profiles:   HR_PORT=%s plus HR_CONFIG_DIR, HR_INPUT_DIR, HR_STATE_DIR, HR_LAN_BIND, HR_ALLOWED_HOSTS, HR_PUBLIC_URL\n' '{{.HR_PORT}}'
+        printf 'Campaign phase: HR_BRIDGE_CONFIG, HR_LAN_RELAY_IP, MODE, INSTALL/UNINSTALL\n'
+        printf 'Campaign runs:  START=YES DAYS=3 RETAIN_DAYS=7, then STOP=YES at your end time; reports: CAMPAIGN=... [DAY=YYYY-MM-DD]\n'
+
+  help-contributors:
+    desc: Show contributor setup, offline checks and safety boundaries
+    silent: true
+    cmds:
+      - |
+        printf '%s\n' \
+          'Contributor quick start (from the repository root):' \
+          '  1. Read CONTRIBUTING.md and the current feature specification.' \
+          '  2. task dev-setup  Create the locked environment and configure the Git hook.' \
+          '  3. task quality    Run lock, formatting, lint and offline application tests.' \
+          '  4. task check      Check syntax, whitespace and private-file exclusions.' \
+          '  5. task help       See all tasks and their effects.' \
+          'Deployment, live data, network changes and paid calls require separate authorization.' \
+          'Use synthetic data; never commit credentials, private evidence or household details.'
+
+  status:
+    desc: Show Git working-tree status
+    silent: true
+    cmds:
+      - git status --short
+
+  docker-status:
+    desc: List existing containers without changing them
+    silent: true
+    cmds:
+      - docker compose version
+      - docker ps -a --format 'table {{"{{"}}.Names{{"}}"}}\t{{"{{"}}.Image{{"}}"}}\t{{"{{"}}.Status{{"}}"}}\t{{"{{"}}.Ports{{"}}"}}'
+
+  ##@ Starlink and DNS pilot
+
+  probe-presence:
+    desc: Run nine read-only Starlink client polls over two minutes; raw output stays private
+    silent: true
+    cmds:
+      - '{{.PYTHON}} investigate_readonly.py'
+
+  dns-check:
+    desc: Validate DNS pilot Compose, firewall and relay files without starting services
+    silent: true
+    cmds:
+      - '{{.PYTHON}} -m unittest discover -s dns-pilot -p test_configuration.py -v'
+      - '{{.PYTHON}} -m unittest discover -s dns-pilot -p test_firewall_contract.py -v'
+      - '{{.PYTHON}} -m unittest discover -s dns-pilot -p test_proxmox_relay.py -v'
+      - '{{.PYTHON}} -m unittest discover -s dns-pilot -p test_observation.py -v'
+
+  dashboard-relay-check:
+    desc: Offline dashboard relay/guard policy and synthetic packet-contract tests
+    silent: true
+    cmds:
+      - '{{.PYTHON}} -m unittest discover -s dns-pilot -p test_dashboard_relay.py -v'
+      - '{{.PYTHON}} -m unittest discover -s dns-pilot -p test_network_contract.py -v'
+
+  dns-test-local:
+    desc: Test the running loopback pilot (sends public test-domain DNS queries)
+    silent: true
+    cmds:
+      - '{{.PYTHON}} -m unittest discover -s dns-pilot -p test_local_runtime.py -v'
+
+  dns-status:
+    desc: Show resolver container state and actual published ports; no secrets
+    silent: true
+    cmds:
+      - '{{.COMPOSE}} ps'
+
+  dns-health:
+    desc: Check container health and whether household queries are still arriving
+    silent: true
+    cmds:
+      - '{{.PYTHON}} dns-pilot/observe_queries.py --once'
+
+  dns-observe:
+    desc: Append one aggregate observation sample (no domains, counts only)
+    silent: true
+    cmds:
+      - '{{.PYTHON}} dns-pilot/observe_queries.py --once >/dev/null && echo "One sample appended to the private series."'
+
+  dns-observe-start:
+    desc: Start or resume the 48-hour 15-minute observation sampler
+    silent: true
+    cmds:
+      - |
+        if pgrep -f 'observe_queries.py --loop' >/dev/null; then
+          echo "Sampler already running."
+        else
+          mkdir -p PRIVATE_OBSERVATION
+          setsid nohup {{.PYTHON}} dns-pilot/observe_queries.py --loop --hours 48 --interval 900 \
+            >> PRIVATE_OBSERVATION/loop.log 2>&1 &
+          sleep 2
+          echo "Sampler started (48 hours, 15-minute interval)."
+        fi
+
+  dns-review:
+    desc: Summarize the most recent observation samples (aggregates only)
+    silent: true
+    cmds:
+      - >-
+        {{.PYTHON}} -c 'import json,pathlib; p=pathlib.Path("PRIVATE_OBSERVATION/samples.jsonl"); rows=[json.loads(l) for l in p.read_text().splitlines() if l.strip()] if p.exists() else []; print("No samples yet. Run: task dns-observe-start") if not rows else [print("%s  queries=%-5d domains=%-4d warn=%d db=%dKB statuses=%s" % (r.get("utc","?")[:19], r.get("queries_in_window",-1), r.get("distinct_domains_in_window",-1), r.get("rate_limit_warnings",-1), r.get("db_bytes",0)//1024, r.get("status_in_window",{}))) for r in rows[-8:]]'
+
+  ##@ Checks and quality gates (offline)
+
+  check:
+    desc: Check Python syntax and whitespace without running diagnostics
+    silent: true
+    cmds:
+      - >-
+        {{.PYTHON}} -c 'import ast; from pathlib import Path; files = sorted(Path(".").glob("*.py")) + sorted(Path("dns-pilot").glob("*.py")); [ast.parse(p.read_text(encoding="utf-8"), filename=str(p)) for p in files]; print("Python syntax OK (%d files)" % len(files))'
+      - git diff --check
+      - git diff --cached --check
+      - git check-ignore -q PRIVATE_RAW.json
+      - git check-ignore -q PRIVATE_INVESTIGATION/check.json
+      - git check-ignore -q dns-pilot/data/check.db
+      - git check-ignore -q PRIVATE_OBSERVATION/samples.jsonl
+      - git check-ignore -q PRIVATE_DNS_BACKUPS
+      - echo "Whitespace and private-file ignore checks OK"
+
+  dev-setup:
+    desc: Create the locked environment and enable the tracked pre-push hook
+    cmds:
+      - |
+        existing=$(git config --local core.hooksPath || true)
+        if [ -n "$existing" ] && [ "$existing" != ".githooks" ]; then
+          echo "core.hooksPath is '$existing'; integrate it deliberately instead of overwriting."
+          exit 1
+        fi
+      - '{{.UV}} sync --project {{.APP}} --locked --group dev'
+      - git config --local core.hooksPath .githooks
+      - chmod +x .githooks/pre-push
+      - echo "Pre-push hook enabled; it uses the locked lefthook binary and runs offline."
+
+  lock-check:
+    desc: Fail if uv.lock is missing or stale, without rewriting it
+    cmds:
+      - '{{.UV_CHECK}} {{.UV}} lock --project {{.APP}} --check --offline'
+
+  format-check:
+    desc: Report formatting drift (no files changed)
+    dir: destination-report
+    cmds:
+      - '{{.UV_CHECK}} {{.UV}} run --no-sync ruff format --check --no-cache src tests tools'
+
+  lint:
+    desc: Report lint findings (no fixes applied)
+    dir: destination-report
+    cmds:
+      - '{{.UV_CHECK}} {{.UV}} run --no-sync ruff check --no-cache src tests tools'
+
+  test-offline:
+    desc: Run offline application tests (fake adapters, real SQLite, in-process only)
+    dir: destination-report
+    cmds:
+      - '{{.UV_CHECK}} {{.UV}} run --no-sync python -m unittest discover -s tests/offline -v'
+
+  quality:
+    desc: Full offline quality gate used by pre-push
+    cmds:
+      - task: lock-check
+      - task: format-check
+      - task: lint
+      - task: test-offline
+
+  format:
+    desc: "Explicit developer action: apply formatting (never run by hooks)"
+    dir: destination-report
+    cmds:
+      - '{{.UV_CHECK}} {{.UV}} run --no-sync ruff format --no-cache src tests tools'
+
+  lint-fix:
+    desc: "Explicit developer action: apply safe lint fixes (never run by hooks)"
+    dir: destination-report
+    cmds:
+      - '{{.UV_CHECK}} {{.UV}} run --no-sync ruff check --fix --no-cache src tests tools'
+
+  ##@ Packaged application (explicit, loopback)
+
+  app-dirs:
+    desc: Create the private 0700 configuration, input and state directories
+    silent: true
+    cmds:
+      - install -d -m 0700 "{{.HR_CONFIG_DIR}}" "{{.HR_CONFIG_DIR}}/tls" "{{.HR_INPUT_DIR}}" "{{.HR_STATE_DIR}}"
+      - 'echo "Private directories ready: {{.HR_CONFIG_DIR}}, {{.HR_INPUT_DIR}}, {{.HR_STATE_DIR}}"'
+
+  app-certs:
+    desc: Create a self-signed loopback certificate once (key stays 0600)
+    silent: true
+    cmds:
+      - task: app-dirs
+      - |
+        if [ -s "{{.HR_CONFIG_DIR}}/tls/cert.pem" ] && [ -s "{{.HR_CONFIG_DIR}}/tls/key.pem" ]; then
+          echo "TLS material already present; left unchanged."
+        else
+          openssl req -x509 -newkey rsa:2048 -nodes -days 397 \
+            -subj "/CN=household-report" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
+            -keyout "{{.HR_CONFIG_DIR}}/tls/key.pem" \
+            -out "{{.HR_CONFIG_DIR}}/tls/cert.pem" 2>/dev/null
+          chmod 600 "{{.HR_CONFIG_DIR}}/tls/key.pem"
+          chmod 644 "{{.HR_CONFIG_DIR}}/tls/cert.pem"
+          echo "Loopback certificate written (key 0600)."
+        fi
+
+  app-password:
+    desc: Set the owner password and session key (interactive, 0600)
+    cmds:
+      - task: app-dirs
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/set_password.py
+        --password-file "{{.HR_CONFIG_DIR}}/password"
+        --session-key-file "{{.HR_CONFIG_DIR}}/session-key"
+
+  app-image:
+    desc: Build the pinned non-root image from the existing uv lock
+    env:
+      HR_CONFIG_DIR: '{{.HR_CONFIG_DIR}}'
+      HR_INPUT_DIR: '{{.HR_INPUT_DIR}}'
+      HR_STATE_DIR: '{{.HR_STATE_DIR}}'
+      HR_PORT: '{{.HR_PORT}}'
+      HR_TIMEZONE: '{{.HR_TIMEZONE}}'
+      HR_ALLOWED_HOSTS: '{{.HR_ALLOWED_HOSTS}}'
+      HR_PUBLIC_URL: '{{.HR_PUBLIC_URL}}'
+    cmds:
+      - docker compose -f destination-report/compose.yaml build
+
+  app-up:
+    desc: Start the loopback-only TLS service
+    preconditions:
+      - sh: 'test -s "{{.HR_CONFIG_DIR}}/password"'
+        msg: "No owner password yet. Run: task app-password"
+    env:
+      HR_CONFIG_DIR: '{{.HR_CONFIG_DIR}}'
+      HR_INPUT_DIR: '{{.HR_INPUT_DIR}}'
+      HR_STATE_DIR: '{{.HR_STATE_DIR}}'
+      HR_PORT: '{{.HR_PORT}}'
+      HR_TIMEZONE: '{{.HR_TIMEZONE}}'
+      HR_ALLOWED_HOSTS: '{{.HR_ALLOWED_HOSTS}}'
+      HR_PUBLIC_URL: '{{.HR_PUBLIC_URL}}'
+    cmds:
+      - task: app-dirs
+      - task: app-certs
+      - docker compose -f destination-report/compose.yaml up -d
+      - 'echo "Dashboard: https://127.0.0.1:{{.HR_PORT}} (self-signed; run task app-import for new evidence)"'
+
+  app-down:
+    desc: Stop the application container (private state is kept)
+    env:
+      HR_CONFIG_DIR: '{{.HR_CONFIG_DIR}}'
+      HR_INPUT_DIR: '{{.HR_INPUT_DIR}}'
+      HR_STATE_DIR: '{{.HR_STATE_DIR}}'
+      HR_PORT: '{{.HR_PORT}}'
+      HR_TIMEZONE: '{{.HR_TIMEZONE}}'
+      HR_ALLOWED_HOSTS: '{{.HR_ALLOWED_HOSTS}}'
+      HR_PUBLIC_URL: '{{.HR_PUBLIC_URL}}'
+    cmds:
+      - docker compose -f destination-report/compose.yaml down
+
+  app-ps:
+    desc: Show application container status and health
+    env:
+      HR_CONFIG_DIR: '{{.HR_CONFIG_DIR}}'
+      HR_INPUT_DIR: '{{.HR_INPUT_DIR}}'
+      HR_STATE_DIR: '{{.HR_STATE_DIR}}'
+      HR_PORT: '{{.HR_PORT}}'
+      HR_TIMEZONE: '{{.HR_TIMEZONE}}'
+      HR_ALLOWED_HOSTS: '{{.HR_ALLOWED_HOSTS}}'
+      HR_PUBLIC_URL: '{{.HR_PUBLIC_URL}}'
+    cmds:
+      - docker compose -f destination-report/compose.yaml ps
+
+  app-logs:
+    desc: Follow application logs (no secret is logged)
+    env:
+      HR_CONFIG_DIR: '{{.HR_CONFIG_DIR}}'
+      HR_INPUT_DIR: '{{.HR_INPUT_DIR}}'
+      HR_STATE_DIR: '{{.HR_STATE_DIR}}'
+      HR_PORT: '{{.HR_PORT}}'
+      HR_TIMEZONE: '{{.HR_TIMEZONE}}'
+      HR_ALLOWED_HOSTS: '{{.HR_ALLOWED_HOSTS}}'
+      HR_PUBLIC_URL: '{{.HR_PUBLIC_URL}}'
+    cmds:
+      - docker compose -f destination-report/compose.yaml logs -f --tail=50
+
+  app-import:
+    desc: Import exported snapshots and presence files into the state database
+    env:
+      HR_CONFIG_DIR: '{{.HR_CONFIG_DIR}}'
+      HR_INPUT_DIR: '{{.HR_INPUT_DIR}}'
+      HR_STATE_DIR: '{{.HR_STATE_DIR}}'
+      HR_PORT: '{{.HR_PORT}}'
+      HR_TIMEZONE: '{{.HR_TIMEZONE}}'
+      HR_ALLOWED_HOSTS: '{{.HR_ALLOWED_HOSTS}}'
+      HR_PUBLIC_URL: '{{.HR_PUBLIC_URL}}'
+    cmds:
+      - docker compose -f destination-report/compose.yaml run --rm --no-deps --entrypoint python app /app/tools/import_inputs.py --input-dir /input --db /state/app.sqlite3
+
+  snapshot-export:
+    desc: Export one closed FTL window read-only (START/END epoch seconds)
+    preconditions:
+      - sh: 'test -n "{{.START}}" && test -n "{{.END}}"'
+        msg: "Usage: task snapshot-export START=<epoch> END=<epoch>"
+    cmds:
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/export_snapshot.py
+        --input-dir "{{.HR_INPUT_DIR}}" --start {{.START}} --end {{.END}}
+
+  presence-poll:
+    desc: Run bounded read-only presence polls (COUNT/INTERVAL overridable)
+    cmds:
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/poll_presence.py
+        --input-dir "{{.HR_INPUT_DIR}}" --count {{.COUNT}} --interval {{.INTERVAL}}
+
+  runtime-check:
+    desc: Explicit container check with synthetic data (needs Docker; not a hook)
+    dir: destination-report
+    env:
+      HR_RUNTIME_TESTS: '1'
+    cmds:
+      - '{{.UV_CHECK}} {{.UV}} run --no-sync python -m unittest discover -s tests/runtime -v'
+
+  ##@ Campaign bridge (opt-in; no resolver reads in check/install)
+
+  campaign-bridge-check:
+    desc: Render bounded system-level units; no install or source read
+    silent: true
+    cmds:
+      - >-
+        {{.UV_CHECK}} {{.UV}} run --project {{.APP}} --no-sync python {{.APP}}/tools/render_bridge_units.py
+        --user "{{.HR_BRIDGE_USER}}" --config "{{.HR_BRIDGE_CONFIG}}"
+        --python "$PWD/destination-report/.venv/bin/python"
+        --bridge "$PWD/destination-report/tools/host_bridge.py"
+        --output "{{.HR_BRIDGE_UNITS}}"
+
+  campaign-bridge-install:
+    desc: Explicitly install and enable the timer (INSTALL=YES)
+    silent: true
+    preconditions:
+      - sh: 'test "{{.INSTALL}}" = YES'
+        msg: "Set INSTALL=YES after live-operation approval"
+    cmds:
+      - task: campaign-bridge-check
+      - sudo install -m 0644 "{{.HR_BRIDGE_UNITS}}/household-campaign-bridge.service" /etc/systemd/system/
+      - sudo install -m 0644 "{{.HR_BRIDGE_UNITS}}/household-campaign-bridge.timer" /etc/systemd/system/
+      - sudo systemctl daemon-reload
+      - sudo systemctl enable --now household-campaign-bridge.timer
+
+  campaign-bridge-status:
+    desc: Show supervised timer/service status without a source read
+    silent: true
+    cmds:
+      - systemctl status --no-pager household-campaign-bridge.timer household-campaign-bridge.service
+
+  campaign-bridge-uninstall:
+    desc: Explicitly disable/remove only bridge units (UNINSTALL=YES)
+    silent: true
+    preconditions:
+      - sh: 'test "{{.UNINSTALL}}" = YES'
+        msg: "Set UNINSTALL=YES after live-operation approval"
+    cmds:
+      - sudo systemctl disable --now household-campaign-bridge.timer
+      - sudo rm -f /etc/systemd/system/household-campaign-bridge.timer /etc/systemd/system/household-campaign-bridge.service
+      - sudo systemctl daemon-reload
+
+  ##@ Campaign lifecycle (explicit authorization; nothing runs from offline gates)
+
+  campaign-preflight:
+    desc: Check campaign configuration offline; MODE=live adds read-only source checks
+    silent: true
+    cmds:
+      - >-
+        {{.UV_CHECK}} {{.UV}} run --project {{.APP}} --no-sync python {{.APP}}/tools/campaign_preflight.py
+        --mode "{{.MODE}}"
+        --config-dir "{{.HR_CAMPAIGN_CONFIG_DIR}}"
+        --input-dir "{{.HR_INPUT_DIR}}"
+        --state-dir "{{.HR_STATE_DIR}}"
+        --lan-bind "{{.HR_LAN_BIND}}"
+        --relay-ip "{{.HR_LAN_RELAY_IP}}"
+        --public-url "{{.HR_LAN_PUBLIC_URL}}"
+        --allowed-hosts "{{.HR_LAN_ALLOWED_HOSTS}}"
+        --port "{{.HR_PORT}}"
+        --compose "{{.APP}}/compose.yaml"
+        --lan-compose "{{.APP}}/compose.lan.yaml"
+        --bridge-config "{{.HR_BRIDGE_CONFIG}}"
+        --namespace "{{.CAMPAIGN_NAMESPACE}}"
+        --database "{{.CAMPAIGN_DB}}"{{.ACK_FLAG}}
+
+  owner-preflight:
+    desc: Check owner 8789 https dashboard configuration offline (no live mode)
+    silent: true
+    cmds:
+      - >-
+        {{.UV_CHECK}} {{.UV}} run --project {{.APP}} --no-sync python {{.APP}}/tools/campaign_preflight.py
+        --mode offline
+        --profile owner
+        --config-dir "{{.HR_CONFIG_DIR}}"
+        --input-dir "{{.HR_INPUT_DIR}}"
+        --state-dir "{{.HR_STATE_DIR}}"
+        --lan-bind "{{.HR_AI_BIND}}"
+        --relay-ip "{{.HR_AI_RELAY_IP}}"
+        --public-url "{{.HR_AI_PUBLIC_URL}}"
+        --allowed-hosts "{{.HR_AI_ALLOWED_HOSTS}}"
+        --port "{{.HR_AI_PORT}}"
+        --compose "{{.APP}}/compose.yaml"
+        --lan-compose "{{.APP}}/compose.ai.yaml"
+        --bridge-config "{{.HR_CONFIG_DIR}}/campaign-bridge.json"
+        --namespace "{{.CAMPAIGN_NAMESPACE}}"
+        --database "{{.CAMPAIGN_DB}}"
+
+  campaign-install:
+    desc: Prepare private campaign paths, build the image and install the bridge timer (INSTALL=YES)
+    preconditions:
+      - sh: 'test "{{.INSTALL}}" = YES'
+        msg: "Set INSTALL=YES after live-operation approval"
+    cmds:
+      - install -d -m 0700 "{{.HR_CAMPAIGN_CONFIG_DIR}}"
+      - task: app-image
+      - task: campaign-bridge-install
+
+  campaign-start:
+    desc: Publish the LAN profile and start the one campaign (START=YES DAYS=3 RETAIN_DAYS=7)
+    silent: true
+    preconditions:
+      - sh: 'test "{{.START}}" = YES'
+        msg: "Set START=YES after explicit campaign-start authorization"
+    env:
+      HR_DATABASE: '{{.CAMPAIGN_DB}}'
+      HR_INPUT_DIR: '{{.HR_INPUT_DIR}}'
+      HR_TIMEZONE: '{{.HR_TIMEZONE}}'
+      HR_CONFIG_DIR: '{{.HR_CAMPAIGN_CONFIG_DIR}}'
+      HR_CAMPAIGN_CONFIG_DIR: '{{.HR_CAMPAIGN_CONFIG_DIR}}'
+      HR_STATE_DIR: '{{.HR_STATE_DIR}}'
+      HR_LAN_BIND: '{{.HR_LAN_BIND}}'
+      HR_ALLOWED_HOSTS: '{{.HR_LAN_ALLOWED_HOSTS}}'
+      HR_PUBLIC_URL: '{{.HR_LAN_PUBLIC_URL}}'
+    cmds:
+      - task: campaign-preflight
+        vars: {MODE: live}
+      - docker compose -f destination-report/compose.yaml -f destination-report/compose.lan.yaml up -d
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/campaign_cli.py
+        --db "{{.CAMPAIGN_DB}}" --timezone "{{.HR_TIMEZONE}}" --namespace "{{.CAMPAIGN_NAMESPACE}}"
+        start --days {{.DAYS}} --retention {{.RETAIN_DAYS}}
+
+  campaign-status:
+    desc: Show sanitized campaign status (CAMPAIGN optional; no domains or clients)
+    silent: true
+    env:
+      HR_DATABASE: '{{.CAMPAIGN_DB}}'
+      HR_INPUT_DIR: '{{.HR_INPUT_DIR}}'
+      HR_TIMEZONE: '{{.HR_TIMEZONE}}'
+    cmds:
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/campaign_cli.py
+        --db "{{.CAMPAIGN_DB}}" --timezone "{{.HR_TIMEZONE}}" --namespace "{{.CAMPAIGN_NAMESPACE}}"
+        status {{.CAMPAIGN_FLAG}}
+
+  campaign-report:
+    desc: Queue and run one frozen report (CAMPAIGN=... and optional DAY=YYYY-MM-DD)
+    silent: true
+    preconditions:
+      - sh: 'test -n "{{.CAMPAIGN}}"'
+        msg: "Usage: task campaign-report CAMPAIGN=<id> [DAY=YYYY-MM-DD]"
+    env:
+      HR_DATABASE: '{{.CAMPAIGN_DB}}'
+      HR_INPUT_DIR: '{{.HR_INPUT_DIR}}'
+      HR_TIMEZONE: '{{.HR_TIMEZONE}}'
+    cmds:
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/campaign_cli.py
+        --db "{{.CAMPAIGN_DB}}" --timezone "{{.HR_TIMEZONE}}" --namespace "{{.CAMPAIGN_NAMESPACE}}"
+        report-request --campaign "{{.CAMPAIGN}}" {{if .DAY}}--day "{{.DAY}}"{{end}}
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/campaign_cli.py
+        --db "{{.CAMPAIGN_DB}}" --timezone "{{.HR_TIMEZONE}}" --namespace "{{.CAMPAIGN_NAMESPACE}}"
+        report-run --campaign "{{.CAMPAIGN}}"
+
+  campaign-stop:
+    desc: Finish early and finalize the active campaign (STOP=YES; CAMPAIGN optional)
+    silent: true
+    preconditions:
+      - sh: 'test "{{.STOP}}" = YES'
+        msg: "Set STOP=YES to finish and finalize the campaign"
+    env:
+      HR_DATABASE: '{{.CAMPAIGN_DB}}'
+      HR_INPUT_DIR: '{{.HR_INPUT_DIR}}'
+      HR_TIMEZONE: '{{.HR_TIMEZONE}}'
+    cmds:
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/campaign_cli.py
+        --db "{{.CAMPAIGN_DB}}" --timezone "{{.HR_TIMEZONE}}" --namespace "{{.CAMPAIGN_NAMESPACE}}"
+        finish {{.CAMPAIGN_FLAG}}
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/campaign_cli.py
+        --db "{{.CAMPAIGN_DB}}" --timezone "{{.HR_TIMEZONE}}" --namespace "{{.CAMPAIGN_NAMESPACE}}"
+        finalize {{.CAMPAIGN_FLAG}}
+
+  campaign-backup:
+    desc: Back up a completed campaign store into an empty private directory (ARCHIVE=...)
+    preconditions:
+      - sh: 'test -n "{{.ARCHIVE}}"'
+        msg: "Usage: task campaign-backup ARCHIVE=<empty 0700 directory>"
+    cmds:
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/campaign_retirement.py
+        --db "{{.CAMPAIGN_DB}}" --input-dir "{{.HR_INPUT_DIR}}" backup --archive "{{.ARCHIVE}}"
+
+  campaign-retire:
+    desc: Preview, then delete only campaign-owned rows (CAMPAIGN; DIGEST/BACKUP_CHOICE/CONFIRM)
+    silent: true
+    preconditions:
+      - sh: 'test -n "{{.CAMPAIGN}}"'
+        msg: "Usage: task campaign-retire CAMPAIGN=<id>"
+    cmds:
+      - |
+        if [ -z "{{.DIGEST}}" ]; then
+          echo "Preview only. Back up first, then re-run with DIGEST=<sha256> BACKUP_CHOICE=backed_up|declined CONFIRM={{.CAMPAIGN}}."
+          {{.UV}} run --project {{.APP}} python {{.APP}}/tools/campaign_retirement.py \
+            --db "{{.CAMPAIGN_DB}}" --input-dir "{{.HR_INPUT_DIR}}" preview --campaign "{{.CAMPAIGN}}"
+        else
+          test "{{.CONFIRM}}" = "{{.CAMPAIGN}}" || { echo 'CONFIRM must repeat CAMPAIGN exactly'; exit 2; }
+          test -n "{{.BACKUP_CHOICE}}" || { echo 'Set BACKUP_CHOICE=backed_up or declined'; exit 2; }
+          {{.UV}} run --project {{.APP}} python {{.APP}}/tools/campaign_retirement.py \
+            --db "{{.CAMPAIGN_DB}}" --input-dir "{{.HR_INPUT_DIR}}" retire --campaign "{{.CAMPAIGN}}" \
+            --digest "{{.DIGEST}}" --backup-choice "{{.BACKUP_CHOICE}}" --confirm "{{.CONFIRM}}"
+        fi
+
+  campaign-uninstall:
+    desc: Stop LAN publication and remove only bridge units; private data is kept (UNINSTALL=YES)
+    preconditions:
+      - sh: 'test "{{.UNINSTALL}}" = YES'
+        msg: "Set UNINSTALL=YES after live-operation approval"
+    env:
+      HR_DATABASE: '{{.CAMPAIGN_DB}}'
+      HR_INPUT_DIR: '{{.HR_INPUT_DIR}}'
+      HR_TIMEZONE: '{{.HR_TIMEZONE}}'
+      HR_CONFIG_DIR: '{{.HR_CAMPAIGN_CONFIG_DIR}}'
+      HR_CAMPAIGN_CONFIG_DIR: '{{.HR_CAMPAIGN_CONFIG_DIR}}'
+      HR_STATE_DIR: '{{.HR_STATE_DIR}}'
+      HR_LAN_BIND: '{{.HR_LAN_BIND}}'
+      HR_ALLOWED_HOSTS: '{{.HR_LAN_ALLOWED_HOSTS}}'
+      HR_PUBLIC_URL: '{{.HR_LAN_PUBLIC_URL}}'
+    cmds:
+      - task: campaign-bridge-uninstall
+        vars: {UNINSTALL: "YES"}
+        ignore_error: true
+      - cmd: docker compose -f destination-report/compose.yaml -f destination-report/compose.lan.yaml down
+        ignore_error: true
+      - echo "Bridge units stopped; LAN service stopped. Private configuration, state and evidence were kept."
+
+  campaign-benchmark:
+    desc: Build the image and run the synthetic 120-hour campaign/recovery benchmark
+    dir: destination-report
+    env:
+      HR_BENCHMARK_TESTS: '1'
+    cmds:
+      - '{{.UV_CHECK}} {{.UV}} run --no-sync python -m unittest discover -s tests/runtime -p test_campaign_benchmark.py -v'
+
+  ##@ Stack lifecycle (typed operator driver; CONFIG selects the operator JSON)
+
+  stack-setup:
+    desc: "Validate config, prepare private paths, render units; no install (CONFIG=...)"
+    silent: true
+    preconditions:
+      - sh: 'test -f "{{.CONFIG}}"'
+        msg: "Usage: task stack-setup CONFIG=/path/to/operator.json"
+    cmds:
+      - '{{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}" setup'
+
+  stack-check:
+    desc: Offline stack validation; MODE=live adds one narrow runtime read
+    silent: true
+    preconditions:
+      - sh: 'test -f "{{.CONFIG}}"'
+        msg: "Usage: task stack-check CONFIG=/path/to/operator.json"
+    cmds:
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}"
+        check {{if eq .MODE "live"}}--live{{end}}
+
+  stack-status:
+    desc: Aggregated sanitized stack health; no source read or external call (MODE=offline to skip)
+    silent: true
+    preconditions:
+      - sh: 'test -f "{{.CONFIG}}"'
+        msg: "Usage: task stack-status CONFIG=/path/to/operator.json"
+    cmds:
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}"
+        status {{if eq .MODE "offline"}}--offline{{end}}
+
+  stack-start:
+    desc: Start the selected application pair only; no campaign, no network change, no spend
+    silent: true
+    preconditions:
+      - sh: 'test -f "{{.CONFIG}}"'
+        msg: "Usage: task stack-start CONFIG=/path/to/operator.json"
+    cmds:
+      - '{{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}" start'
+
+  stack-stop:
+    desc: Stop bridge then applications; data and DNS untouched (STOP=YES)
+    silent: true
+    preconditions:
+      - sh: 'test "{{.STOP}}" = YES'
+        msg: "Set STOP=YES to stop the stack"
+    cmds:
+      - '{{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}" stop --confirm stop'
+
+  stack-restart:
+    desc: Stop, then start the same prior operation within campaign bounds (RESTART=YES)
+    silent: true
+    preconditions:
+      - sh: 'test "{{.RESTART}}" = YES'
+        msg: "Set RESTART=YES to restart the stack"
+    cmds:
+      - '{{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}" restart --confirm restart'
+
+  stack-upgrade:
+    desc: Reviewable maintenance transaction to RELEASE=... manifest (UPGRADE=YES)
+    silent: true
+    preconditions:
+      - sh: 'test "{{.UPGRADE}}" = YES'
+        msg: "Set UPGRADE=YES after reviewing the target release"
+      - sh: 'test -n "{{.RELEASE}}"'
+        msg: "Usage: task stack-upgrade RELEASE=/path/to/manifest.json UPGRADE=YES"
+    cmds:
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}"
+        upgrade --release "{{.RELEASE}}" {{.ARCHIVE_FLAG}} --confirm upgrade
+
+  stack-rollback:
+    desc: Switch back to a preserved RELEASE=... manifest; no in-place downgrade (ROLLBACK=YES)
+    silent: true
+    preconditions:
+      - sh: 'test "{{.ROLLBACK}}" = YES'
+        msg: "Set ROLLBACK=YES after reviewing the preserved release"
+      - sh: 'test -n "{{.RELEASE}}"'
+        msg: "Usage: task stack-rollback RELEASE=/path/to/manifest.json ROLLBACK=YES"
+    cmds:
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}"
+        rollback --release "{{.RELEASE}}" {{.ARCHIVE_FLAG}} --confirm rollback
+
+  stack-backup:
+    desc: Quiesce, back up and recreate the same release (BACKUP=YES ARCHIVE=...)
+    silent: true
+    preconditions:
+      - sh: 'test "{{.BACKUP}}" = YES'
+        msg: "Set BACKUP=YES; brief downtime applies"
+      - sh: 'test -n "{{.ARCHIVE}}"'
+        msg: "Usage: task stack-backup ARCHIVE=/empty/0700/dir BACKUP=YES"
+    cmds:
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}"
+        backup --archive "{{.ARCHIVE}}" --confirm backup
+
+  stack-restore:
+    desc: Restore ARCHIVE into empty private DEST; isolation only, never production (RESTORE=YES)
+    silent: true
+    preconditions:
+      - sh: 'test "{{.RESTORE}}" = YES'
+        msg: "Set RESTORE=YES; destination must be a new empty 0700 directory"
+      - sh: 'test -n "{{.ARCHIVE}}" && test -n "{{.DEST}}"'
+        msg: "Usage: task stack-restore ARCHIVE=... DEST=... RESTORE=YES"
+    cmds:
+      - >-
+        {{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}"
+        restore --archive "{{.ARCHIVE}}" --dest "{{.DEST}}" --confirm restore
+
+  stack-uninstall:
+    desc: Preview, then remove only owned publication; evidence and DNS kept (UNINSTALL=YES)
+    silent: true
+    preconditions:
+      - sh: 'test -n "{{.CONFIG}}"'
+        msg: "Usage: task stack-uninstall CONFIG=... [UNINSTALL=YES]"
+    cmds:
+      - |
+        if [ "{{.UNINSTALL}}" = YES ]; then
+          {{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}" uninstall --confirm uninstall
+        else
+          {{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}" uninstall
+        fi
+
+  stack-journal:
+    desc: Show maintenance journal status (resume/reset are explicit driver commands)
+    silent: true
+    preconditions:
+      - sh: 'test -f "{{.CONFIG}}"'
+        msg: "Usage: task stack-journal CONFIG=/path/to/operator.json"
+    cmds:
+      - '{{.UV}} run --project {{.APP}} python {{.APP}}/tools/stack_cli.py --config "{{.CONFIG}}" journal status'

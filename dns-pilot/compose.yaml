@@ -1,0 +1,62 @@
+name: starlink-dns-pilot
+
+services:
+  pihole:
+    image: pihole/pihole:2026.10.0@sha256:d34134716fc32038b052a8674c7c6879e0ff21f0e6d8af345166fffa2c27c113
+    container_name: starlink-dns-pilot
+    restart: unless-stopped
+    stop_grace_period: 45s
+    ports:
+      - "127.0.0.1:1053:53/udp"
+      - "127.0.0.1:1053:53/tcp"
+      - "127.0.0.1:8443:443/tcp"
+    environment:
+      TZ: UTC
+      WEBPASSWORD_FILE: pihole_admin
+      FTLCONF_dns_upstreams: "1.1.1.1;1.0.0.1"
+      FTLCONF_dns_listeningMode: ALL
+      FTLCONF_dns_blocking_active: "false"
+      FTLCONF_dns_blockESNI: "false"
+      FTLCONF_dns_specialDomains_mozillaCanary: "false"
+      FTLCONF_dns_specialDomains_iCloudPrivateRelay: "false"
+      FTLCONF_dns_specialDomains_designatedResolver: "false"
+      FTLCONF_dns_queryLogging: "true"
+      FTLCONF_dns_analyzeOnlyAandAAAA: "false"
+      FTLCONF_dns_revServers: ""
+      FTLCONF_database_maxDBdays: "7"
+      FTLCONF_database_DBimport: "true"
+      FTLCONF_database_DBinterval: "60"
+      FTLCONF_misc_privacylevel: "0"
+      FTLCONF_dhcp_active: "false"
+      FTLCONF_ntp_ipv4_active: "false"
+      FTLCONF_ntp_ipv6_active: "false"
+      FTLCONF_ntp_sync_active: "false"
+      FTLCONF_webserver_port: "443s"
+    secrets:
+      - pihole_admin
+    volumes:
+      - etc-pihole:/etc/pihole
+    networks:
+      - resolver
+    cap_drop:
+      - NET_RAW
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  etc-pihole:
+
+networks:
+  resolver:
+    enable_ipv6: false
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-sl-dns
+      com.docker.network.bridge.host_binding_ipv4: 127.0.0.1
+
+secrets:
+  pihole_admin:
+    file: ${HOME}/.config/starlink-dns-pilot/admin-password

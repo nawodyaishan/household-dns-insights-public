@@ -1,0 +1,33 @@
+# Owner-only TLS research dashboard override; requires separate live authorization
+# to publish. The approved VM bind, port and one public relayed origin are fixed by
+# dns-pilot/network_policy.py: bind 10.10.10.20:8789, origin https://192.168.1.10:8789.
+# Direct VM addresses are not approved public origins; wildcard/IPv6 binds are refused.
+# docker compose -f compose.yaml -f compose.ai.yaml config must show ONE host binding.
+services:
+  app:
+    networks:
+      - owner
+    ports: !override
+      - "${HR_AI_BIND:-10.10.10.20}:${HR_PORT:-8789}:8789"
+    environment:
+      HR_PORT: "${HR_PORT:-8789}"
+      HR_ALLOWED_HOSTS: "${HR_ALLOWED_HOSTS:-192.168.1.10:8789}"
+      HR_PUBLIC_URL: "${HR_PUBLIC_URL:-https://192.168.1.10:8789}"
+      AI_PROVIDER: "${AI_PROVIDER:-openrouter}"
+      AI_BASE_URL: "${AI_BASE_URL:-https://openrouter.ai/api/v1}"
+      AI_MODEL_ID: "${AI_MODEL_ID:-mistralai/mistral-nemo}"
+      AI_FREE_ONLY: "${AI_FREE_ONLY:-0}"
+      AI_CREDENTIAL_FILE: "${AI_CREDENTIAL_FILE:-/config/.env.local}"
+      AI_CREDENTIAL_VAR: "${AI_CREDENTIAL_VAR:-OPENROUTER_API_KEY}"
+      AI_CONTEXT_LIMIT: "${AI_CONTEXT_LIMIT:-32768}"
+      AI_COMPLETION_LIMIT: "${AI_COMPLETION_LIMIT:-1024}"
+      AI_COMPLETION_CAP: "${AI_COMPLETION_CAP:-1024}"
+      EXA_MCP_URL: "${EXA_MCP_URL:-https://mcp.exa.ai/mcp}"
+      EXA_KEY_FILE: "${EXA_KEY_FILE:-/config/exa-api-key}"
+
+networks:
+  owner:
+    driver: bridge
+    enable_ipv6: false
+    driver_opts:
+      com.docker.network.bridge.name: br-hr006

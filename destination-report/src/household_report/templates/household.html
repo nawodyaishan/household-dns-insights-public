@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Shared household DNS report{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Household gaming DNS report</h1>
+  {% if shared_control %}<p>Shared LAN control: every reachable browser can open the other sections, including raw household diagnostics, and operate campaigns. Traffic is unencrypted HTTP. DNS does not prove gameplay, a player, or play time.</p>
+  <p><a href="/household/owner">Campaign controls</a></p>
+  {% else %}<p>Only reviewed gaming DNS relevance is shared. DNS does not prove gameplay, a player, or play time.</p>{% endif %}
+  {% if campaign %}
+  <p>Campaign {{ campaign.campaign_id }} · {{ campaign.state }} · ends {{ campaign.utc_bounds[1]|utc_time }}</p>
+  <form id="household-generate" method="post" action="/household/generate">
+    <input type="hidden" name="view_token" value="{{ token }}">
+    <label>Period
+      <select name="hours">
+        <option value="">Campaign to date</option>
+        <option value="24">Last 24 hours</option>
+        <option value="48">Last 48 hours</option>
+      </select>
+    </label>
+    <label>Completed local day (optional) <input type="date" name="day"></label>
+    <button>Generate report</button>
+  </form>
+  <p>Choosing a local day or trailing window clips to the selected campaign and settled data. DNS evidence is not proof of gameplay, a player, or play time.</p>
+  <p id="household-status" role="status"></p>
+  <script src="/static/household.js" defer></script>
+  {% else %}<p>No campaign is currently available.</p>{% endif %}
+</section>
+{% endblock %}

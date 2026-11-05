@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Gaming DNS relevance{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <p class="eyebrow">Household DNS · device unknown</p>
+  <h1>Gaming destination relevance</h1>
+  <p class="notice">DNS observations can suggest destination relevance; they do not prove a connection, game launch, match, device, player, or play time.</p>
+  <p class="notice">This is the <strong>legacy one-hour snapshot mode</strong>, limited to a single closed import. For campaign-to-date, local-day and trailing 24/48-hour periods, use the <a href="/household">household campaign summary</a>.</p>
+</section>
+
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if projection %}
+  {% set counts = projection.counts %}
+  {% set ns = projection.namespace %}
+  <section class="panel" aria-labelledby="window-title">
+    <h2 id="window-title">Pinned imported window</h2>
+    <dl class="facts">
+      <div><dt>Snapshot</dt><dd>{{ projection.snapshot_id }}</dd></div>
+      <div><dt>Window</dt><dd>[{{ projection.window.start_utc }}, {{ projection.window.end_utc }})</dd></div>
+      <div><dt>Timezone</dt><dd>{{ projection.window.timezone or timezone }}</dd></div>
+      <div><dt>Captured</dt><dd>{{ projection.window.captured_utc|utc_time }}</dd></div>
+      <div><dt>Imported</dt><dd>{{ projection.window.imported_utc|utc_time }}</dd></div>
+      <div><dt>Scope</dt><dd>{{ projection.household_scope }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="panel" aria-labelledby="usage-title">
+    <h2 id="usage-title">Local recorded usage</h2>
+    <p>Ledger totals only, not provider account totals or a live connectivity check.</p>
+    <form method="post" action="/gaming/filter" class="inline-form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="snapshot" value="{{ selected_snapshot }}">
+      <input type="hidden" name="basis" value="{{ basis }}">
+      <input type="hidden" name="group" value="{{ group }}">
+      <input type="hidden" name="role" value="{{ role }}">
+      <label for="usage-analysis">Usage scope</label>
+      <select id="usage-analysis" name="usage_analysis">
+        <option value="">UTC day · {{ usage_day }}</option>
+        {% for item in history %}
+        <option value="{{ item.analysis_id }}" {% if usage_analysis == item.analysis_id %}selected{% endif %}>Run {{ item.analysis_id }} · {{ item.state }} · {{ item.provider or "provider unknown" }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Show usage</button>
+    </form>
+    {% set exa = usage.exa %}
+    {% set providers = usage.providers %}
+    <div class="usage-grid">
+      <article class="usage-card">
+        <h3>Exa MCP</h3>
+        <p>Recorded app ledger · {{ usage.scope.kind }}{% if usage.scope.dispatch_day %} {{ usage.scope.dispatch_day }} UTC{% endif %}</p>
+        <ul>
+          {% for operation in ["search", "fetch", "discover"] %}
+          {% set item = exa[operation] %}
+          <li><strong>{{ operation|title }}:</strong> {{ item.attempts }} attempt(s); outcomes {{ item.outcomes }}; budget-charged tokens {{ item.budget_charged_tokens }}{% if item.measurement_status == "unavailable" %}; measured tokens unavailable{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </article>
+      {% for provider_name, provider_data in providers.items() %}
+      <article class="usage-card">
+        <h3>{{ provider_name|title }}</h3>
+        <p>{{ provider_name|title }} provider ledger only; other providers are excluded.</p>
+        <ul>
+          {% for operation in ["catalog", "probe", "completion"] %}
+          {% set item = provider_data[operation] %}
+          <li><strong>{{ operation|title }}:</strong> {{ item.attempts }} attempt(s); outcomes {{ item.outcomes }}; reserved {{ item.reserved_tokens }} tokens; charged {{ item.budget_charged_tokens }} tokens.
+            {% if item.measurement_status == "complete" %}Measured prompt/completion {{ item.measured_prompt_tokens }}/{{ item.measured_completion_tokens }} tokens (complete).{% elif item.measurement_status == "partial" %}Partial measured prompt/completion {{ item.measured_prompt_tokens }}/{{ item.measured_completion_tokens }} tokens; {{ item.missing_measurements }} measurement(s) unavailable.{% elif item.measurement_status == "unavailable" %}Measured tokens unavailable for {{ item.missing_measurements }} attempt(s).{% else %}No token-measured attempts in this scope.{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </article>
+      {% else %}
+      <article class="usage-card">
+        <h3>Model provider</h3>
+        <p>No model provider attempts recorded in this scope.</p>
+      </article>
+      {% endfor %}
+    </div>
+    <p class="meta">Pending, failed and incomplete attempts remain visible in outcome/measurement status. Exa totals are app-wide, not tied to a model provider. OpenCode MCP calls are not recorded in this application ledger.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="counts-title">
+    <h2 id="counts-title">Window coverage</h2>
+    <dl class="facts">
+      <div><dt>Snapshot destinations / DNS rows</dt><dd>{{ counts.snapshot_domains|thousands }} / {{ counts.snapshot_rows|thousands }}</dd></div>
+      <div><dt>Eligible union / DNS rows</dt><dd>{{ counts.eligible_domains|thousands }} / {{ counts.eligible_rows|thousands }}</dd></div>
+      <div><dt>Known-list matches</dt><dd>{{ counts.known_list_domains|thousands }}</dd></div>
+      <div><dt>Model proposals</dt><dd>{{ counts.model_domains|thousands }}</dd></div>
+      <div><dt>Overlap (counted once in union)</dt><dd>{{ counts.known_model_overlap_domains|thousands }}</dd></div>
+      <div><dt>Reverse / protocol destinations</dt><dd>{{ counts.reverse_domains }} / {{ counts.protocol_domains }}</dd></div>
+      <div><dt>Not selected / DNS rows</dt><dd>{{ counts.not_selected_domains|thousands }} / {{ counts.not_selected_rows|thousands }}</dd></div>
+    </dl>
+    {% if ns.state == "unavailable" %}<p class="warning">Known-list unavailable{% if ns.error %}: {{ ns.error }}{% endif %}. Model proposals only.</p>
+    {% elif ns.state == "invalid" %}<p class="warning">Known-list unavailable: {{ ns.error or "Namespace list is invalid" }}. Model proposals only.</p>
+    {% elif ns.rule_count == 0 %}<p class="warning">The reviewed namespace list is valid but empty; known-list matching is unavailable.</p>
+    {% else %}<p>Namespace list revision {{ ns.revision }} · {{ ns.sha256 }}</p>{% endif %}
+  </section>
+
+  <form method="post" action="/gaming/filter" class="panel filter-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="snapshot" value="{{ selected_snapshot }}">
+    <input type="hidden" name="usage_analysis" value="{{ usage_analysis }}">
+    <input type="hidden" name="fingerprint" value="{{ projection.fingerprint }}">
+    <h2>Filter this window</h2>
+    <label for="basis">Detection basis</label>
+    <select id="basis" name="basis">
+      <option value="all" {% if basis == "all" %}selected{% endif %}>All eligible (known + model)</option>
+      <option value="known_list" {% if basis == "known_list" %}selected{% endif %}>Known-list only</option>
+      <option value="model" {% if basis == "model" %}selected{% endif %}>Model proposals only</option>
+    </select>
+    <label for="group">Game/platform group</label>
+    <select id="group" name="group">
+      <option value="">All groups</option>
+      {% for group_id, label in groups %}<option value="{{ group_id }}" {% if group == group_id %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <label for="role">Saved role</label>
+    <select id="role" name="role">
+      <option value="">All roles</option>
+      {% for item in roles %}<option value="{{ item }}" {% if role == item %}selected{% endif %}>{{ item|replace("_", " ")|title }}</option>{% endfor %}
+    </select>
+    <button type="submit">Apply filters</button>
+    <a class="button secondary" href="/gaming">Reset</a>
+    <a href="/">Back to all destinations</a>
+    <p role="status">Showing {{ entries|length }} eligible destination(s) under the selected filters.</p>
+  </form>
+
+  {% if stale %}<p class="error" role="alert">This gaming view changed since it was displayed. Reloaded current data is shown; review it before exporting.</p>{% endif %}
+  <section class="panel" aria-labelledby="export-title">
+    <h2 id="export-title">Export this filtered view</h2>
+    <p>Exports use the full matching set, not a display limit. They omit client identifiers, raw DNS rows, filesystem paths, provider evidence bodies and credentials.</p>
+    <div class="inline-form">
+      {% for format in ["csv", "json"] %}
+      <form method="post" action="/gaming/export.{{ format }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="snapshot" value="{{ selected_snapshot }}">
+        <input type="hidden" name="basis" value="{{ basis }}">
+        <input type="hidden" name="group" value="{{ group }}">
+        <input type="hidden" name="role" value="{{ role }}">
+        <input type="hidden" name="fingerprint" value="{{ projection.fingerprint }}">
+        <button type="submit">Download {{ format|upper }}</button>
+      </form>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="analysis-action-title">
+    <h2 id="analysis-action-title">Optional saved analysis</h2>
+    <p>Review the exact snapshot-wide public candidates and local exclusions before deciding whether to proceed. This scope is not limited to the filtered gaming list. Opening the preview makes no external call; only its separate confirmation can start the existing bounded workflow.</p>
+    <form method="get" action="/analysis/preview">
+      <input type="hidden" name="preset" value="snapshot">
+      <input type="hidden" name="snapshot" value="{{ selected_snapshot }}">
+      <input type="hidden" name="scope" value="gaming">
+      <button type="submit">Review analysis candidates</button>
+    </form>
+  </section>
+
+  {% if not projection.entries %}
+  <section class="panel"><h2>No matching DNS destinations</h2><p>No destinations met the known-list or gameplay-matchmaking predicate in this imported window. This is not evidence that nobody played.</p></section>
+  {% elif not entries %}
+  <section class="panel"><h2>No destinations match these filters</h2><p>Reset filters to view the eligible destinations for this imported window.</p></section>
+  {% else %}
+  <section class="gaming-groups" aria-label="Eligible destinations">
+    {% for item in entries %}
+    <article class="panel gaming-entry">
+      <h2>{{ item.group.group_label }} <span class="meta">({{ item.group.group_kind }})</span></h2>
+      <p class="domain">{{ item.domain }}</p>
+      <p>{{ item.query_count|thousands }} persisted DNS row(s) · first {{ item.first_query_utc|utc_time }} · last {{ item.last_query_utc|utc_time }}</p>
+      <p>
+        {% if item.known_list_match %}<span class="tag">Known-list match · {{ item.known_rule.rule_id }} · {{ item.known_rule.match }}</span>{% endif %}
+        {% if item.model_proposal %}<span class="tag proposal">Model proposal — not independently verified</span>{% endif %}
+        {% if item.known_list_match and not item.analysis %}<span class="tag">Role unknown / not analyzed</span>{% endif %}
+        {% if item.analysis and item.analysis.state != "model_proposal" %}<span class="tag">{{ item.analysis.state|replace("_", " ")|title }}</span>{% endif %}
+      </p>
+      {% if item.analysis %}
+      <p>Role: {{ item.analysis.role|replace("_", " ")|title }} · proposed service: {{ item.analysis.service or "unknown" }}</p>
+        {% if item.analysis.supporting_spans %}
+        <details><summary>Saved supporting evidence (local only)</summary>
+          <ul>{% for span in item.analysis.supporting_spans %}<li>{{ span.text }}</li>{% endfor %}</ul>
+        </details>
+        {% endif %}
+      {% endif %}
+      <p class="meta">DNS types {{ item.query_types }} · statuses {{ item.statuses }} · replies {{ item.dns_replies }}</p>
+    </article>
+    {% endfor %}
+  </section>
+  {% endif %}
+  <section class="panel" aria-labelledby="timeline-title">
+    <h2 id="timeline-title">Selected DNS rows over time</h2>
+    <p>Bins reflect persisted queries, not gameplay sessions or activity duration.</p>
+    <div class="timeline-list">
+      {% for bin in projection.timeline.bins %}
+      <div class="timeline-row"><span>{{ bin.start_utc|utc_time }}</span><span>{{ bin.rows }} row(s), {{ bin.domains }} domain(s)</span><meter min="0" max="100" value="{{ bin.height_percent }}">{{ bin.height_percent }}%</meter></div>
+      {% endfor %}
+    </div>
+  </section>
+  {% else %}
+  <section class="panel"><h2>No imported snapshots</h2><p>Import a closed snapshot to view household DNS destination relevance. No activity is inferred.</p></section>
+{% endif %}
+{% endblock %}

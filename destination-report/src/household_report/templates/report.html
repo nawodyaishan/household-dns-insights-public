@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}Destinations · Household DNS report{% endblock %}
+{% block content %}
+{% if collector %}
+  <section class="card" aria-label="Collector status">
+    <h2>Collector status</h2>
+    <p><strong>{{ collector.label }}</strong>{% if collector.state %} · state {{ collector.state }}{% endif %}</p>
+    <p class="muted">{{ collector.detail }}</p>
+    <p class="meta">
+      Last bridge success {{ collector.last_bridge_epoch_utc|utc_time }} ·
+      last capture {{ collector.last_capture_epoch_utc|utc_time }} ·
+      last import {{ collector.last_import_epoch_utc|utc_time }}
+      {% if collector.consecutive_failures is not none %} · consecutive failures {{ collector.consecutive_failures }}{% endif %}
+    </p>
+    {% if collector.report_bounds_utc %}
+      <p class="meta">
+        Report bounds {{ collector.report_bounds_utc[0]|local_time }} – {{ collector.report_bounds_utc[1]|local_time }} ·
+        rules revision {{ collector.report_rules_revision or "not recorded" }}
+      </p>
+    {% endif %}
+  </section>
+{% endif %}
+{% if report is none %}
+  <section class="card">
+    <h1>No observations in this period</h1>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    {% if snapshots %}
+      <p class="muted">Imported snapshots: {{ snapshots|length }}. Choose a period that overlaps one of them.</p>
+      <p><a href="/?preset=snapshot">Open the newest snapshot instead</a></p>
+    {% else %}
+      <p class="muted">No snapshot has been imported yet. Import a private extraction before using this dashboard.</p>
+    {% endif %}
+    <form method="get" action="/" class="period-form">
+      <label for="preset">Period</label>
+      <select id="preset" name="preset">
+        <option value="24h" {% if preset == "24h" %}selected{% endif %}>Last 24 hours</option>
+        <option value="48h" {% if preset == "48h" %}selected{% endif %}>Last 48 hours</option>
+        <option value="snapshot" {% if preset == "snapshot" %}selected{% endif %}>Newest snapshot</option>
+        <option value="custom" {% if preset == "custom" %}selected{% endif %}>Custom window</option>
+      </select>
+      <button type="submit">Show</button>
+    </form>
+  </section>
+{% else %}
+  {% macro entry_card(entry) %}
+    <article class="entry">
+      <h3>{{ entry.domain }}</h3>
+      <p class="meta">
+        {{ entry.query_count|thousands }} DNS rows ·
+        category {{ entry.classification.category }} ·
+        confidence {{ entry.classification.confidence }}
+      </p>
+      <p>
+        {% if entry.classification.likely_service %}<strong>{{ entry.classification.likely_service }}</strong>{% else %}<span class="muted">Service unknown</span>{% endif %}
+        {% if entry.classification.provider %} · provider {{ entry.classification.provider }}{% endif %}
+      </p>
+      <p class="meta">
+        Local namespace hint: {{ entry.classification.get('namespace_hint') or "none stored" }} ·
+        Cached mapping: {{ entry.classification.get('verification_state') or "unresolved" }}
+      </p>
+      {% if entry.classification.analysis %}
+        <div class="notice">
+          <strong>{{ entry.classification.analysis.state|replace("_", " ")|title }}</strong>
+          {% if entry.classification.analysis.service %} · {{ entry.classification.analysis.service }}{% endif %}
+          {% if entry.classification.analysis.provider %} · provider {{ entry.classification.analysis.provider }}{% endif %}
+          · role {{ entry.classification.analysis.role }}
+          {% if entry.classification.analysis.reason %}<p>{{ entry.classification.analysis.reason }}</p>{% endif %}
+          {% if entry.classification.analysis.supporting_spans %}
+            <details>
+              <summary>Model evidence spans</summary>
+              {% for span in entry.classification.analysis.supporting_spans %}
+                <p class="meta">
+                  {% if span.get('source_url') and span.get('source_url').startswith("https://") %}<a href="{{ span.source_url }}" rel="noreferrer">{{ span.source_url }}</a>{% else %}Source {{ span.get('source_id', 'unknown') }}{% endif %}
+                  · SHA-256 {{ span.source_sha256 }} · characters {{ span.start }}–{{ span.end }}
+                </p>
+                <p>{{ span.text }}</p>
+              {% endfor %}
+            </details>
+          {% endif %}
+        </div>
+      {% else %}
+        <p class="meta">No saved model analysis for this destination.</p>
+      {% endif %}
+      {% if entry.tags %}
+        <p class="tags">{% for tag in entry.tags %}<span class="tag">{{ tag }}</span>{% endfor %}</p>
+      {% endif %}
+      <p class="meta">First {{ entry.first_query_utc|local_time }} · last {{ entry.last_query_utc|local_time }}</p>
+      <details>
+        <summary>Evidence and source row IDs</summary>
+        <p class="meta">Apparent clients: {{ entry.apparent_clients }}</p>
+        <p class="meta">Query types: {{ entry.query_types }}</p>
+        <p class="meta">Observed spellings: {{ entry.observed_spellings|join(", ") }}</p>
+        {% if entry.classification.evidence %}
+          <pre>{{ entry.classification.evidence|tojson(indent=2) }}</pre>
+        {% else %}
+          <p class="muted">No stored evidence for this label; it remains unresolved or provider-only.</p>
+        {% endif %}
+        <p class="meta">Source row IDs: {{ entry.observation_ids|join(", ") }}</p>
+      </details>
+    </article>
+  {% endmacro %}
+
+  <section class="card">
+    <h1>Household destinations</h1>
+    <p class="muted">
+      {{ report.window.start_utc|local_time }} – {{ report.window.end_utc|local_time }}
+      · {{ report.window.seconds // 3600 }} h half-open window
+      · generated {{ report.generated_utc|local_time }}
+    </p>
+    <form method="get" action="/" class="period-form">
+      <label for="preset">Period</label>
+      <select id="preset" name="preset">
+        <option value="24h" {% if preset == "24h" %}selected{% endif %}>Last 24 hours</option>
+        <option value="48h" {% if preset == "48h" %}selected{% endif %}>Last 48 hours</option>
+        <option value="snapshot" {% if preset == "snapshot" %}selected{% endif %}>Newest snapshot</option>
+        <option value="custom" {% if preset == "custom" %}selected{% endif %}>Custom window</option>
+      </select>
+      <label for="snapshot">Snapshot</label>
+      <select id="snapshot" name="snapshot">
+        <option value="" {% if not snapshot %}selected{% endif %}>All overlapping</option>
+        {% for item in snapshots %}
+          <option value="{{ item.snapshot_id }}" {% if snapshot == item.snapshot_id %}selected{% endif %}>
+            {{ item.start_epoch|local_time }} · {{ item.window_count|thousands }} rows
+          </option>
+        {% endfor %}
+      </select>
+      <label for="start">Custom start ({{ timezone }})</label>
+      <input id="start" name="start" type="datetime-local" value="{{ start }}">
+      <label for="end">Custom end ({{ timezone }})</label>
+      <input id="end" name="end" type="datetime-local" value="{{ end }}">
+      <button type="submit">Apply period</button>
+    </form>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <p class="meta">
+      Snapshot {{ report.snapshot_id[:12] }}…{% if report.sources|length > 1 %} · {{ report.sources|length }} sources merged{% endif %}
+      · report digest {{ report.period_digest[:16] }}…
+      · classification cache {{ report.classification_cache_revision }}
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>Observation coverage</h2>
+    <div class="grid">
+      <div class="stat"><span class="stat-value">{{ report.summary.raw_rows|thousands }}</span><span class="stat-label">DNS rows preserved</span></div>
+      <div class="stat"><span class="stat-value">{{ report.summary.distinct_domains|thousands }}</span><span class="stat-label">Distinct names</span></div>
+      <div class="stat"><span class="stat-value">{{ report.summary.device_attributed_rows|thousands }}</span><span class="stat-label">Rows with a verified device</span></div>
+      <div class="stat"><span class="stat-value">{{ report.summary.device_unattributed_rows|thousands }}</span><span class="stat-label">Rows explicitly device-unknown</span></div>
+      <div class="stat"><span class="stat-value">{{ report.summary.router_forwarded_rows_origin_unknown|thousands }}</span><span class="stat-label">Router-forwarded rows</span></div>
+      <div class="stat"><span class="stat-value">{{ report.coverage.distinct_minutes_with_rows }}</span><span class="stat-label">Minutes with rows</span></div>
+    </div>
+    <p class="meta">
+      Captured {{ report.coverage.captured_utc|utc_time }} ·
+      retained rows all time {% if report.coverage.retained_rows_all_time %}{{ report.coverage.retained_rows_all_time|thousands }}{% else %}not reported{% endif %} ·
+      quiet minutes {{ report.coverage.quiet_minutes }} of {{ report.coverage.total_minutes }}
+    </p>
+    <p class="muted">{{ report.coverage.persistence_lag_note }} {{ report.coverage.quiet_minute_note }}</p>
+    {% if report.data_gaps %}
+      <h3>Periods with no imported snapshot</h3>
+      <ul class="plain">
+        {% for gap in report.data_gaps %}
+          <li>{{ gap.start_utc|local_time }} – {{ gap.end_utc|local_time }} · {{ gap.reason }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Classification denominators</h2>
+    <table>
+      <thead><tr><th>Bucket</th><th>Domains</th><th>DNS rows</th></tr></thead>
+      <tbody>
+        <tr><td>Service-specific</td><td>{{ report.classification_coverage.domains.service_specific|thousands }}</td><td>{{ report.classification_coverage.rows.service_specific|thousands }}</td></tr>
+        <tr><td>Provider or infrastructure only</td><td>{{ report.classification_coverage.domains.provider_only|thousands }}</td><td>{{ report.classification_coverage.rows.provider_only|thousands }}</td></tr>
+        <tr><td>Unresolved, kept explicit</td><td>{{ report.classification_coverage.domains.unresolved|thousands }}</td><td>{{ report.classification_coverage.rows.unresolved|thousands }}</td></tr>
+        <tr><td><strong>Total</strong></td><td><strong>{{ report.classification_coverage.domains.total|thousands }}</strong></td><td><strong>{{ report.classification_coverage.rows.total|thousands }}</strong></td></tr>
+      </tbody>
+    </table>
+    <p class="muted">{{ report.classification_coverage.note }}</p>
+    <p class="muted">This table counts stored mappings. Model proposals, provider associations and unknown outcomes are shown separately below and do not imply gameplay or device activity.</p>
+  </section>
+
+  <section class="card">
+    <h2>Saved analysis by gaming role</h2>
+    <p class="muted">{{ report.analysis_coverage.note }}</p>
+    <h3>Role coverage</h3>
+    <table>
+      <thead><tr><th>Role or state</th><th>Domains</th><th>DNS rows</th></tr></thead>
+      <tbody>
+        {% for role, count in report.analysis_coverage.domains.by_role.items()|sort %}
+          <tr><td>Role: {{ role|replace("_", " ") }}</td><td>{{ count|thousands }}</td><td>{{ report.analysis_coverage.rows.by_role.get(role, 0)|thousands }}</td></tr>
+        {% endfor %}
+        <tr><td><strong>All household destinations</strong></td><td><strong>{{ report.analysis_coverage.domains.total|thousands }}</strong></td><td><strong>{{ report.analysis_coverage.rows.total|thousands }}</strong></td></tr>
+      </tbody>
+    </table>
+    <h3>Analysis state coverage</h3>
+    <table>
+      <thead><tr><th>State</th><th>Domains</th><th>DNS rows</th></tr></thead>
+      <tbody>
+        {% for state, count in report.analysis_coverage.domains.by_state.items()|sort %}
+          <tr><td>{{ state|replace("_", " ") }}</td><td>{{ count|thousands }}</td><td>{{ report.analysis_coverage.rows.by_state.get(state, 0)|thousands }}</td></tr>
+        {% endfor %}
+        <tr><td><strong>All household destinations</strong></td><td><strong>{{ report.analysis_coverage.domains.total|thousands }}</strong></td><td><strong>{{ report.analysis_coverage.rows.total|thousands }}</strong></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>DNS rows per {{ report.timeline.bin_seconds // 60 }}-minute bin</h2>
+    <div class="timeline" role="group" aria-label="DNS rows per time bin">
+      {% for bin in report.timeline.bins %}
+        {% set height = (bin.height_percent // 5) * 5 %}
+        <div class="tick" title="{{ bin.start_utc|local_time('%Y-%m-%d %H:%M') }} · {{ bin.rows }} rows · {{ bin.domains }} domains">
+          <div class="bar h-{{ height }}"></div>
+          {% if loop.index0 % 12 == 0 %}<span class="tick-label">{{ bin.start_utc|local_time('%H:%M') }}</span>{% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    <p class="meta">Peak {{ report.timeline.peak_rows }} rows in one bin. {{ report.timeline.note }}</p>
+  </section>
+
+  <section class="card">
+    <h2>Filter observed destinations</h2>
+    <form method="get" action="/" class="filter-form">
+      <input type="hidden" name="preset" value="{{ preset }}">
+      <input type="hidden" name="snapshot" value="{{ snapshot }}">
+      <input type="hidden" name="start" value="{{ start }}">
+      <input type="hidden" name="end" value="{{ end }}">
+      <label for="q">Name contains</label>
+      <input id="q" name="q" type="search" value="{{ q }}" autocomplete="off">
+      <label for="category">Category</label>
+      <select id="category" name="category">
+        <option value="" {% if not category %}selected{% endif %}>Any category</option>
+        {% for item in categories %}
+          <option value="{{ item }}" {% if category == item %}selected{% endif %}>{{ item }}</option>
+        {% endfor %}
+      </select>
+      <label class="check"><input type="checkbox" name="service_only" value="true" {% if service_only %}checked{% endif %}> Service-specific only</label>
+      <button type="submit">Filter</button>
+    </form>
+    <p class="meta">
+      Showing {{ view.matched_domains|thousands }} of {{ view.total_domains|thousands }} domains
+      · {{ view.matched_rows|thousands }} of {{ view.total_rows|thousands }} destination rows.
+      Filters are local and never change stored observations.
+    </p>
+  </section>
+
+  {% for key, title, note in [
+      ("service", "Service-specific destinations", "Cached reviewed labels; subdomains stay preserved."),
+      ("provider", "Provider or infrastructure only", "The provider or CDN is known; the specific service is not."),
+      ("unresolved", "Unresolved destinations", "No verified mapping. Left unknown rather than guessed.")
+  ] %}
+    <section class="card">
+      <h2>{{ title }}</h2>
+      <p class="muted">{{ note }} {{ sections[key]|length }} domain(s).</p>
+      {% for entry in sections[key][:limit] %}
+        {{ entry_card(entry) }}
+      {% endfor %}
+      {% if sections[key]|length > limit %}
+        <p class="meta">Showing the first {{ limit }} of {{ sections[key]|length }}; download the JSON report for the complete list.</p>
+      {% endif %}
+    </section>
+  {% endfor %}
+
+  <section class="card">
+    <details>
+      <summary>Reverse lookups and DNS namespaces ({{ report.reverse_lookups|length }} domains)</summary>
+      <p class="muted">Reverse queries describe infrastructure, not destinations.</p>
+      {% for entry in report.reverse_lookups[:40] %}
+        <p class="meta">{{ entry.domain }} · {{ entry.query_count }} rows</p>
+      {% endfor %}
+    </details>
+    <h2>Limitations</h2>
+    <ul class="plain">
+      {% for item in report.limitations %}<li>{{ item }}</li>{% endfor %}
+    </ul>
+    <p class="meta">
+      <a href="/diagnostics/report.json?preset={{ preset }}&amp;snapshot={{ snapshot|urlencode }}&amp;start={{ start|urlencode }}&amp;end={{ end|urlencode }}">Download this report as JSON</a>
+      · {{ report.rate_note }}
+    </p>
+  </section>
+{% endif %}
+{% endblock %}

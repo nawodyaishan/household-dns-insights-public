@@ -1,0 +1,17 @@
+# Offline, non-mutating pre-push checks for the application package.
+# All jobs delegate to Task (Taskfile.yml) so manual and hook runs share one
+# implementation.
+# They never auto-fix, stage files, download tools, contact AI/Exa, require Docker
+# or touch private evidence. Bypass is possible: this is developer feedback, not a
+# deployment or security control.
+pre-push:
+  parallel: true
+  jobs:
+    - name: lock
+      run: task lock-check
+    - name: format
+      run: task format-check
+    - name: lint
+      run: task lint
+    - name: offline-tests
+      run: task test-offline

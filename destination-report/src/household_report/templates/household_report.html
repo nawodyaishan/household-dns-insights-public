@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Frozen household gaming report{% endblock %}
+{% block content %}
+<h1>Household gaming DNS report</h1>
+<p>DNS evidence is not proof of gameplay, player, device use or play duration.</p>
+<p>Frozen interval [{{ projection.window.start_utc }}, {{ projection.window.end_utc }}) · {{ projection.household_scope }}</p>
+<p>Requested [{{ projection.window.requested_start|utc_time }}, {{ projection.window.requested_end|utc_time }}) · actual [{{ projection.window.actual_start|utc_time }}, {{ projection.window.actual_end|utc_time }}) · timezone {{ projection.window.timezone }}</p>
+<p>Revision {{ projection.get('revision', 1) }}{% if projection.get('predecessor_report_id') %} · supersedes {{ projection.get('predecessor_report_id') }}{% endif %}</p>
+<p>Eligible {{ projection.counts.eligible_rows }} rows · unmatched {{ projection.counts.unknown_or_unmatched_rows }} rows · unresolved {{ projection.coverage.unresolved_chunks }} chunks.</p>
+<p>Coverage complete: {{ projection.coverage.fully_resolved }} · last captured {{ projection.freshness.last_capture_utc|utc_time }} · imported {{ projection.freshness.last_import_utc|utc_time }}</p>
+<p>Source states: {{ projection.coverage.by_state }} · reconciliation pending: {{ projection.coverage.reconciliation_pending }}</p>
+{% if projection.coverage.get('deadline_reached') %}<p>Report deadline reached; only partial coverage is claimed.</p>{% endif %}
+{% for gap in projection.coverage.unresolved_intervals %}<p>Unresolved [{{ gap.start_epoch|utc_time }}, {{ gap.end_epoch|utc_time }}) · {{ gap.state }}</p>{% endfor %}
+<p>Reviewed rules: {{ projection.namespace.state }}{% if projection.namespace.empty_acknowledged %} (acknowledged empty){% endif %}, revision {{ projection.namespace.revision }}.</p>
+<form method="get"><label>Basis <select name="basis"><option value="all">All</option><option value="known_list" {% if basis == 'known_list' %}selected{% endif %}>Known-list</option><option value="model" {% if basis == 'model' %}selected{% endif %}>Model proposals</option></select></label><label>Group <select name="group"><option value="">All</option>{% for item in projection.entries|map(attribute='group')|unique(attribute='group_id') %}<option value="{{ item.group_id }}" {% if group == item.group_id %}selected{% endif %}>{{ item.group_label }}</option>{% endfor %}</select></label><label>Saved role <select name="role"><option value="">All</option>{% for item in ['gameplay_matchmaking', 'unknown'] %}<option value="{{ item }}" {% if role == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label><button>Filter</button></form>
+<p><a href="/household/reports/{{ report_id }}/export.json?basis={{ basis|urlencode }}&amp;group={{ group|urlencode }}&amp;role={{ role|urlencode }}">JSON export</a> · <a href="/household/reports/{{ report_id }}/export.csv?basis={{ basis|urlencode }}&amp;group={{ group|urlencode }}&amp;role={{ role|urlencode }}">CSV export</a></p>
+{% for entry in entries %}<article class="panel"><h2>{{ entry.group.group_label }} · {{ entry.domain }}</h2><p>{{ entry.query_count }} DNS rows · first {{ entry.first_query_utc }} · last {{ entry.last_query_utc }}</p><p>{% if entry.known_list_match %}Known-list (human-reviewed){% endif %} {% if entry.model_proposal %}Model proposal (unverified){% endif %} · purpose {{ entry.purpose }}</p><p>Statuses {{ entry.statuses }} · replies {{ entry.dns_replies }}</p></article>{% else %}<p>No selected gaming DNS rows. This does not establish inactivity.</p>{% endfor %}
+{% endblock %}

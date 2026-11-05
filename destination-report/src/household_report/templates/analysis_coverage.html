@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Research coverage · Household DNS report{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Research coverage and first-time worklist</h1>
+  {% if error and not summary %}
+    <p class="error" role="alert">{{ error }}</p>
+    <p><a href="/analysis">Choose another period</a></p>
+  {% elif summary %}
+    <p class="muted">
+      {{ period.start_utc|local_time }} – {{ period.end_utc|local_time }}
+      · computed locally from the selected imported window; no external call was made.
+    </p>
+    <dl class="facts">
+      <dt>Distinct eligible names</dt><dd>{{ summary.eligible|thousands }}</dd>
+      <dt>All observed domains in scope</dt><dd>{{ summary.denominator|thousands }}</dd>
+      <dt>Not yet researched</dt><dd>{{ summary.pending|thousands }}</dd>
+      <dt>Worklist complete</dt><dd>{{ "yes" if summary.complete else "no" }}</dd>
+    </dl>
+    <table>
+      <thead><tr><th>Workflow state</th><th>Names</th></tr></thead>
+      <tbody>
+        {% for state, count in summary.counts.items() %}
+          <tr>
+            <td>{{ state|replace("_", " ") }}</td>
+            <td>{{ count|thousands }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="notice">{{ summary.note }}</p>
+    <p class="muted">
+      States are mutually exclusive: a name in one workflow state is not counted again in
+      another, and coverage describes the research workflow, not gaming detection. Counts
+      are distinct eligible names; DNS rows are never claimed as matches or players.
+    </p>
+  {% endif %}
+</section>
+
+{% if page_of_names %}
+<section class="card">
+  <h2>Next first-time page (up to 20 names)</h2>
+  <p class="muted">
+    Review and cached names are excluded before the volume cap, so repeated pages advance
+    through genuinely new names without repeating unchanged cached or refused work.
+  </p>
+  {% if page_of_names.candidates %}
+    <table>
+      <thead><tr><th>#</th><th>Public name</th><th>DNS rows</th></tr></thead>
+      <tbody>
+        {% for item in page_of_names.candidates %}
+          <tr>
+            <td>{{ page_of_names.offset + loop.index }}</td>
+            <td>{{ item.name }}</td>
+            <td>{{ item.dns_rows|thousands }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted">
+      {{ page_of_names.remaining }} pending names remain after this page.
+      {% if not page_of_names.complete %}
+        <a href="/analysis/coverage?preset={{ params.preset }}&amp;snapshot={{ params.snapshot }}&amp;start={{ params.start }}&amp;end={{ params.end }}&amp;scope={{ params.scope }}&amp;offset={{ page_of_names.offset + page_of_names.limit }}">Next page</a>
+      {% endif %}
+      {% if params.offset > 0 %}
+        · <a href="/analysis/coverage?preset={{ params.preset }}&amp;snapshot={{ params.snapshot }}&amp;start={{ params.start }}&amp;end={{ params.end }}&amp;scope={{ params.scope }}&amp;offset={{ [params.offset - page_of_names.limit, 0]|max }}">Previous page</a>
+      {% endif %}
+    </p>
+  {% else %}
+    <p class="notice" role="status">Every first-time candidate in this period has a terminal disposition.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

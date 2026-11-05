@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Sign in · Household DNS report{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Sign in</h1>
+  <p class="muted">This dashboard is for the local owner. The session cookie is signed, HttpOnly and SameSite=Strict.</p>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/login" data-single-submit>
+    <input type="hidden" name="next" value="{{ next_path }}">
+    <label for="password">Owner password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+    <button type="submit">Sign in</button>
+  </form>
+</section>
+{% endblock %}

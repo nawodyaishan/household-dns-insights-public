@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Analyze · Household DNS report{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Optional destination analysis</h1>
+  <p class="muted">
+    Ordinary reports never call a provider. An analysis starts only from the confirmation
+    page below, uses the frozen local period, and is bounded by the configured limits.
+    Free-only mode never falls back to a paid model.
+  </p>
+  <dl class="facts">
+    <dt>AI configured</dt><dd>{% if ai.enabled %}yes{% else %}no{% endif %}</dd>
+    <dt>Provider</dt><dd>{{ ai.provider or "not configured" }}</dd>
+    <dt>Model</dt><dd>{{ ai.model or "not selected" }}</dd>
+    <dt>Free-only</dt><dd>{% if ai.free_only %}enforced{% else %}not enforced{% endif %}</dd>
+    <dt>Exa evidence</dt><dd>{% if ai.exa_enabled %}enabled (approved search/fetch only){% else %}disabled{% endif %}</dd>
+    {% if ai.spend.paid_mode %}
+      <dt>Spend mode</dt><dd>paid (per-run confirmation required before every confirmed run)</dd>
+      <dt>Provider tariff</dt><dd>owner-set upper bound: ${{ "%.4f"|format(ai.spend.provider_price_per_million) }} per 1,000,000 reserved tokens (tickets are charged at the full conservative reservation)</dd>
+      <dt>Exa tariff</dt><dd>owner-set upper bound: ${{ "%.4f"|format(ai.spend.exa_price_per_operation) }} per evidence operation</dd>
+      <dt>Currency ceilings</dt>
+      <dd>
+        run: ${{ "%.2f"|format(ai.spend.currency_ceiling_run) }} ·
+        UTC day: ${{ "%.2f"|format(ai.spend.currency_ceiling_day) }} ·
+        Exa run: ${{ "%.2f"|format(ai.spend.exa_currency_ceiling_run) }} ·
+        Exa day: ${{ "%.2f"|format(ai.spend.exa_currency_ceiling_day) }}
+      </dd>
+    {% else %}
+      <dt>Spend mode</dt><dd>free only (no currency accounting; monetary spend disabled)</dd>
+    {% endif %}
+  </dl>
+  {% if not ai.enabled %}
+    <p class="notice" role="status">
+      Analysis is disabled until an owner-selected provider, model and credential are configured.
+      This page and every report remain fully usable without AI.
+    </p>
+  {% endif %}
+  <h2>Limits</h2>
+  <ul class="plain">
+    <li>{{ limits.requests_per_analysis }} provider request attempt(s) per analysis</li>
+    <li>{{ limits.tokens_per_analysis }} token reservation per analysis</li>
+    <li>{{ limits.exa_per_analysis }} Exa attempt(s) per analysis</li>
+    <li>{{ limits.requests_per_day }} provider attempt(s) and {{ limits.exa_per_day }} Exa attempt(s) per UTC day</li>
+  </ul>
+  <p class="meta">Retries consume the same budget. Refused work is marked deferred, never silently dropped.</p>
+</section>
+
+<section class="card">
+  <h2>Optional gaming validation manifest</h2>
+  <p class="notice" role="status">Not ready. No candidate, public evidence, provider or model has been selected, and every operation allowance is zero.</p>
+  <p class="muted">This local template is not an authorization and makes no external calls. A future run needs a separately approved candidate, evidence mode, exact public payload, provider/model, token reservation and numerical limits.</p>
+  <details>
+    <summary>View empty manifest template</summary>
+    <pre>{{ live_manifest|tojson(indent=2) }}</pre>
+  </details>
+</section>
+
+<section class="card">
+  <h2>Preview a period</h2>
+  <form method="get" action="/analysis/preview" class="period-form">
+    <label for="preset">Period</label>
+    <select id="preset" name="preset">
+      <option value="24h" selected>Last 24 hours</option>
+      <option value="48h">Last 48 hours</option>
+      <option value="snapshot">Newest snapshot</option>
+      <option value="custom">Custom window</option>
+    </select>
+    <label for="start">Custom start ({{ timezone }})</label>
+    <input id="start" name="start" type="datetime-local">
+    <label for="end">Custom end ({{ timezone }})</label>
+    <input id="end" name="end" type="datetime-local">
+    <button type="submit">Preview what would be sent</button>
+  </form>
+  <p class="meta">A preview is entirely local: it lists public candidate names and makes no request.</p>
+</section>
+
+<section class="card">
+  <h2>Research coverage and worklist</h2>
+  <form method="get" action="/analysis/coverage" class="period-form">
+    <label for="coverage-preset">Period</label>
+    <select id="coverage-preset" name="preset">
+      <option value="24h" selected>Last 24 hours</option>
+      <option value="48h">Last 48 hours</option>
+      <option value="snapshot">Newest snapshot</option>
+      <option value="custom">Custom window</option>
+    </select>
+    <label for="coverage-start">Custom start ({{ timezone }})</label>
+    <input id="coverage-start" name="start" type="datetime-local">
+    <label for="coverage-end">Custom end ({{ timezone }})</label>
+    <input id="coverage-end" name="end" type="datetime-local">
+    <button type="submit">Show local coverage</button>
+  </form>
+  <p class="meta">
+    Coverage is a local read model: it classifies already observed names into workflow
+    states and shows the next first-time page without selecting or sending anything.
+  </p>
+</section>
+
+<section class="card">
+  <h2>Recent analyses</h2>
+  {% if history %}
+    <table>
+      <thead><tr><th>Created ({{ timezone }})</th><th>State</th><th>Model</th><th></th></tr></thead>
+      <tbody>
+        {% for item in history %}
+          <tr>
+            <td>{{ item.created_utc|local_time }}</td>
+            <td><span class="state state-{{ item.state }}">{{ item.state }}</span></td>
+            <td>{{ item.model_id or "not recorded" }}</td>
+            <td><a href="/analysis/{{ item.analysis_id|urlencode }}">Open</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No analysis has been started.</p>
+  {% endif %}
+</section>
+{% endblock %}
