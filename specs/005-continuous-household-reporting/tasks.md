@@ -1,6 +1,6 @@
 # 005 — Targeted household gaming observation — tasks r2
 
-Inputs: [spec r2](spec.md), [plan r2](plan.md) · 2026-10-24. Replaces tasks r1 entirely. Approval is recorded once in [spec.md](spec.md#combined-approval). The owner continued with “use docs/handover/2026-10-24-005-b1.md and start b2 implementation” and then “proceed to next”; these authorize offline B2 and B3 respectively, not live source access or service installation. This ledger distinguishes tested offline contracts from unverified household operation.
+Inputs: [spec r2](spec.md), [plan r2](plan.md) · 2026-10-24. Replaces tasks r1 entirely. Approval is recorded once in [spec.md](spec.md#combined-approval). The owner continued with “use the B1 handover and start b2 implementation” and then “proceed to next”; these authorize offline B2 and B3 respectively, not live source access or service installation. This ledger distinguishes tested offline contracts from unverified household operation.
 
 Feature-wide specialists/tools are assigned in [plan.md](plan.md#specialist-and-tool-assignments). No task-specific exceptions. Execute one authorized batch, verify it, record `awaiting human review`, then stop. Batch completion does not authorize the next batch.
 
