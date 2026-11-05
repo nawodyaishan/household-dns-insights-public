@@ -38,28 +38,59 @@ The offline implementation is accepted and verified (566 offline tests; lock, fo
 
 ## How it fits together
 
-```text
-household devices
-   │  DNS
-   ▼
-Starlink router ──► dish ──► space
-   │  Custom DNS → 192.168.1.10
-   ▼
-Proxmox host — LAN relay (DNAT 192.168.1.10 → 10.10.10.20)
-   ▼
-Ubuntu VM 10.10.10.20
- ├─ Pi-hole, monitoring only, blocking off
- │     └─ pihole-FTL.db — the raw query log (the primary data)
- ├─ capture bridge — systemd timer, one tick per minute
- │     └─ read-only export of settled windows → private input directory
- └─ report app — FastAPI + Jinja, SQLite store
-       ├─ shared dashboard   http://192.168.1.10:8787
-       └─ owner dashboard    https://192.168.1.10:8789
+```mermaid
+flowchart TB
+    accTitle: Household DNS Insights architecture
+    accDescr: Three stages show DNS observation, private evidence processing, and report access. Router-forwarded queries reach monitoring-only Pi-hole through a Proxmox relay. A read-only capture bridge imports settled windows into the reporting store. Only the protected owner dashboard can dispatch explicitly confirmed, budget-capped external research.
+
+    subgraph OBSERVE["01 · OBSERVE — monitoring, not blocking"]
+        direction LR
+        devices["Household devices<br/>DNS queries"]
+        router["Starlink router<br/>Custom DNS forwarding"]
+        resolver["Pi-hole via Proxmox relay<br/>Cloudflare upstreams"]
+        devices --> router --> resolver
+    end
+
+    subgraph EVIDENCE["02 · PRESERVE — private storage, outside Git"]
+        direction LR
+        queries[("Pi-hole query log<br/>Primary evidence")]
+        bridge["Capture bridge<br/>Read-only, settled windows"]
+        reports[("Reporting store<br/>Frozen reports + coverage")]
+        queries --> bridge -->|"Idempotent import"| reports
+    end
+
+    subgraph ACCESS["03 · PRESENT — separate access boundaries"]
+        direction LR
+        shared["Shared dashboard<br/>Read reports · :8787"]
+        owner["Owner dashboard<br/>TLS + login + CSRF · :8789"]
+        research["Optional external research<br/>AI provider + Exa MCP"]
+        shared ~~~ owner
+        owner -.->|"Explicit consent + budget"| research
+    end
+
+    OBSERVE -->|"Timestamped DNS observations"| EVIDENCE
+    EVIDENCE -->|"FastAPI + Jinja report views"| ACCESS
+
+    classDef network fill:#dbeafe,stroke:#2563eb,color:#172554,stroke-width:2px
+    classDef evidence fill:#dcfce7,stroke:#15803d,color:#14532d,stroke-width:2px
+    classDef surface fill:#ede9fe,stroke:#7c3aed,color:#3b0764,stroke-width:2px
+    classDef external fill:#ffedd5,stroke:#c2410c,color:#7c2d12,stroke-width:2px,stroke-dasharray:5 4
+
+    class devices,router,resolver network
+    class queries,bridge,reports evidence
+    class shared,owner surface
+    class research external
+
+    style OBSERVE fill:#eff6ff,stroke:#93c5fd,color:#172554
+    style EVIDENCE fill:#f0fdf4,stroke:#86efac,color:#14532d
+    style ACCESS fill:#faf5ff,stroke:#c4b5fd,color:#3b0764
 ```
+
+**Reading the diagram:** blue observes, green preserves, purple presents, and the dashed orange boundary is optional external research. Router-forwarded queries identify the router, not the originating device. Ordinary reporting stays local; only an explicitly confirmed research run discloses selected public names/text to external services.
 
 Raw evidence, credentials, exports and backups live outside Git, in private `0700/0600` paths. See [current architecture](docs/reference/current-architecture.md) for the full component and data-flow description.
 
-The addresses in the diagram are **documentation placeholders**. A real deployment will use your own router, relay host and VM addresses — see the [network policy contract](dns-pilot/network_policy.py) and the [bring-up runbook](docs/operations/household-bringup-runbook.md) for the values you are expected to change.
+Addresses in the deployment examples are **documentation placeholders**. A real deployment will use your own router, relay host and VM addresses — see the [network policy contract](dns-pilot/network_policy.py) and the [bring-up runbook](docs/operations/household-bringup-runbook.md) for the values you are expected to change.
 
 ## Public release
 
